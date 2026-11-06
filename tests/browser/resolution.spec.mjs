@@ -42,3 +42,34 @@ test('external references, gaps and factory value proofs stay separately readabl
     rmSync(project,{recursive:true,force:true});
   }
 });
+
+test('interface dispatch gaps explain writes and parameters and open the exact rejection source', async ({page}) => {
+  const parent=path.resolve('artifacts/object-dispatch/browser');mkdirSync(parent,{recursive:true});
+  const project=mkdtempSync(path.join(parent,'project-'));
+  writeFileSync(path.join(project,'index.ts'), `interface API{run():void}
+    const stable:API={run(){}};const changed:API={run(){}};changed.run=()=>{};
+    export function run(receiver:API){stable.run();changed.run();receiver.run()}`);
+  const server=await createLocalServer({rootDir:project,dataDirectory:path.join(project,'cache'),ai:{apiKey:'',model:''}});
+  try {
+    await page.goto(await server.listen(0));
+    await expect(page.locator('.snapshot-state')).toContainText('分析完成');
+    await page.getByRole('combobox',{name:'搜索文件或符号'}).fill('run');
+    await page.getByRole('option',{name:/^run/}).first().click();
+    await page.getByRole('tab',{name:/^关系/}).click();
+    await expect(page.locator('.dispatch-gap')).toHaveCount(2);
+    await expect(page.locator('.relations-body')).toContainText('接口签名不能确定实际对象');
+    await expect(page.locator('.relations-body')).toContainText('动态属性写入');
+    for(const [width,height] of [[1440,900],[768,1024],[390,844]]){
+      await page.setViewportSize({width,height});
+      await page.locator('.dispatch-gap').last().scrollIntoViewIfNeeded();
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await page.screenshot({path:path.join(parent,`gap-reasons-${width}.png`),fullPage:true,animations:'disabled'});
+    }
+    await page.getByRole('button',{name:'查看缺口依据 1',exact:true}).first().click();
+    await expect(page.locator('.source-line.highlighted')).toContainText('changed.run');
+  }finally{
+    await server.app.close();
+    if(!project.startsWith(parent+path.sep))throw Error('Unexpected cleanup path');
+    rmSync(project,{recursive:true,force:true});
+  }
+});

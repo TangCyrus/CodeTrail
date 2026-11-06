@@ -69,7 +69,7 @@ export interface NodeDetail {
   incoming: NodeConnection[];
   outgoing: NodeConnection[];
   hiddenConnections: number;
-  unresolved: { id: string; kind: string; reason: string; excerpt: string; evidenceId: string }[];
+  unresolved: { id: string; kind: string; reason: string; excerpt: string; evidenceId: string; reasonDetail?: import("./index.js").UnresolvedRecord["reasonDetail"] }[];
   externalReferences: NodeDetail["unresolved"];
   resolutionSummary: ResolutionSummary;
 }

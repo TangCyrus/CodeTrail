@@ -65,6 +65,8 @@ export interface UnresolvedRecord {
   reason: "dynamic" | "ambiguous" | "external" | "unresolved" | "excluded" | "unsupported";
   evidenceId: string;
   candidateIds: string[];
+  /** Why an object/interface call could not be pinned to a concrete source value. */
+  reasonDetail?: { code: string; message: string; evidenceIds: string[] };
 }
 
 export interface AnalysisDiagnostic {
@@ -177,6 +179,7 @@ export function assertSnapshotIntegrity(snapshot: AnalysisSnapshot): void {
   for (const item of snapshot.unresolved) {
     if (!nodes.has(item.from) || !evidence.has(item.evidenceId)
       || item.candidateIds.some((id) => !nodes.has(id))) throw new Error(`Invalid unresolved item: ${item.id}`);
+    if (item.reasonDetail?.evidenceIds.some(id => !evidence.has(id))) throw new Error(`Dangling dispatch evidence: ${item.id}`);
   }
   if (snapshot.statistics.files !== files.size || snapshot.statistics.symbols !== symbols.size
     || snapshot.statistics.relations !== snapshot.relations.length

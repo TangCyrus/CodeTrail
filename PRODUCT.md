@@ -1,6 +1,6 @@
 # CodeTrail 产品约定
 
-本文件提取自用户已确认的 MVP 方案与后续 Agent 接入、自分析改进要求。独立工作台的按需 AI 使用用户选择的 OpenAI Responses API。当前交付为 0.6.0 本地 MCP 与 Skill 试用候选版本。
+本文件提取自用户已确认的 MVP 方案与后续 Agent 接入、自分析改进要求。独立工作台的按需 AI 使用用户选择的 OpenAI Responses API。当前交付为 0.7.0 本地 MCP 与 Skill 试用候选版本。
 
 CodeTrail 帮助 vibe coding 中的开发者理解架构、定位关键代码、追踪局部关系，并核实修改可能涉及的位置。新手需要逐层理解，熟练开发者需要快速定位，两者共享同一套代码事实。
 

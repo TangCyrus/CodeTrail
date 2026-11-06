@@ -7,8 +7,9 @@ import { createCompiler, rangeOf } from "./compiler.js";
 import { hash, scanProject, slash, within } from "./scan.js";
 import { destructuredFactoryValue } from "./value-origins.js";
 import { summarizeResolution } from "@codetrail/shared";
+import { ObjectDispatchResolver, type DispatchFailure } from "./object-dispatch.js";
 
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }
@@ -110,6 +111,9 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
     const byNode = new Map<ts.Node, Registered>();
     const bySymbol = new Map<ts.Symbol, Registered[]>();
     const byDeclaration = new Map<string, Registered[]>();
+    const nativeDeclarations = new Map<string, ts.Node>();
+    const uses = new Map<string, ts.Identifier[]>();
+    const symbolCache = new WeakMap<ts.Node, ts.Symbol | undefined>();
     const declarationKey = (node: ts.Node): string => `${path.resolve(node.getSourceFile().fileName)}:${node.pos}:${node.end}:${node.kind}`;
     const owners = new Map<ts.Node, string>();
     hooks.onProgress?.("extracting");
@@ -142,10 +146,11 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       if (via?.length) { entry.resolution = "value-origin"; entry.supportingEvidenceIds = [...new Set(via.map(makeEvidence))]; }
       relations.set(id, entry);
     }
-    function addUnresolved(kind: UnresolvedRecord["kind"], from: string, node: ts.Node, reason: UnresolvedRecord["reason"], candidateIds: string[] = []): void {
+    function addUnresolved(kind: UnresolvedRecord["kind"], from: string, node: ts.Node, reason: UnresolvedRecord["reason"], candidateIds: string[] = [], detail?: DispatchFailure): void {
       const evidenceId = makeEvidence(node);
       const id = shortId("unresolved", `${kind}:${from}:${evidenceId}:${reason}`);
-      unresolved.set(id, { id, from, kind, reason, evidenceId, candidateIds });
+      unresolved.set(id, { id, from, kind, reason, evidenceId, candidateIds,
+        ...(detail ? { reasonDetail: { code: detail.code, message: detail.message, evidenceIds: detail.nodes.filter(part => fileByAbsolute.has(path.resolve(part.getSourceFile().fileName))).map(makeEvidence) } } : {}) });
     }
     function canonical(symbol: ts.Symbol | undefined): ts.Symbol | undefined {
       const seen = new Set<ts.Symbol>();
@@ -166,6 +171,8 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       return fileByAbsolute.get(path.resolve(node.getSourceFile().fileName))!.id;
     }
     function collect(node: ts.Node, parentId: string, scope: string): void {
+      if (ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node)
+        || ts.isMethodDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isPropertyDeclaration(node)) nativeDeclarations.set(declarationKey(node), node);
       const kind = declarationKind(node);
       let nextParent = parentId;
       let nextScope = scope;
@@ -243,6 +250,15 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
         ts.forEachChild(node, mark);
       }
       function writes(node: ts.Node): void {
+        if (ts.isIdentifier(node)) {
+          const symbol = symbolAt(node);
+          for (const declaration of symbol?.declarations ?? []) {
+            const key = declarationKey(declaration);
+            if (!nativeDeclarations.has(key)) continue;
+            const references = uses.get(key);
+            if (references) references.push(node); else uses.set(key, [node]);
+          }
+        }
         if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) mark(node.left);
         if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node))
           && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)) mark(node.operand);
@@ -251,6 +267,9 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       }
       writes(source);
     }
+    const checkerByPath = new Map(compiler.files.map(entry => [path.resolve(entry.source.fileName), entry.checker]));
+    const objectDispatch = new ObjectDispatchResolver({ key: declarationKey, native: node => nativeDeclarations.get(declarationKey(node)),
+      checker: node => checkerByPath.get(path.resolve(node.getSourceFile().fileName))!, uses });
     for (const entry of registered) {
       const key = declarationKey(entry.node);
       byDeclaration.set(key, [...(byDeclaration.get(key) ?? []), entry]);
@@ -258,9 +277,11 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
     }
 
     function symbolAt(expression: ts.Node): ts.Symbol | undefined {
-      if (ts.isShorthandPropertyAssignment(expression.parent)) return canonical(checker.getShorthandAssignmentValueSymbol(expression.parent));
-      if (ts.isPropertyAccessExpression(expression)) expression = expression.name;
-      return canonical(checker.getSymbolAtLocation(expression));
+      if (symbolCache.has(expression)) return symbolCache.get(expression);
+      const symbol = ts.isShorthandPropertyAssignment(expression.parent) ? canonical(checker.getShorthandAssignmentValueSymbol(expression.parent))
+        : canonical(checker.getSymbolAtLocation(ts.isPropertyAccessExpression(expression) ? expression.name : expression));
+      symbolCache.set(expression, symbol);
+      return symbol;
     }
     function targets(symbol: ts.Symbol | undefined): Registered[] {
       if (!symbol) return [];
@@ -321,6 +342,21 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       const expression = unwrap(node.expression);
       const symbol = symbolAt(expression);
       let candidates = byNode.has(expression) ? [byNode.get(expression)!] : targets(symbol);
+      let dispatchFailure: DispatchFailure | undefined;
+      let dispatchVia: ts.Node[] | undefined;
+      let rejectObjectTarget = false;
+      if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
+        const isObjectMethod = candidates.some(candidate => ts.isMethodDeclaration(candidate.node) && ts.isObjectLiteralExpression(candidate.node.parent));
+        if (isObjectMethod || !candidates.some(candidate => candidate.callable) && missingReason(symbol) !== "external") {
+          const dispatch = objectDispatch.resolve(expression);
+          if ("failure" in dispatch) { dispatchFailure = dispatch.failure; rejectObjectTarget = isObjectMethod; }
+          else {
+            const target = byNode.get(dispatch.value) ?? byDeclaration.get(declarationKey(dispatch.value))?.[0];
+            if (target?.callable) { candidates = [target]; dispatchVia = dispatch.via; }
+            else dispatchFailure = { code: "member-not-indexed", message: "目标函数没有纳入当前源码图谱。", nodes: [dispatch.value] };
+          }
+        }
+      }
       const origin = destructuredFactoryValue(symbol, checker, written, declarationKey);
       if (origin && origin.via.every(part => fileByAbsolute.has(path.resolve(part.getSourceFile().fileName)))) {
         const traced = byNode.get(origin.expression) ?? byDeclaration.get(declarationKey(origin.expression))?.[0];
@@ -328,14 +364,14 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
         if (values.length === 1 && values[0]!.callable) candidates = values;
       }
       const type = checker.getTypeAtLocation(expression);
-      const dynamic = !!(type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter))
+      const dynamic = !dispatchVia && !!(type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter))
         || candidates.some((candidate) => candidate.record.kind === "parameter");
       if (expression.kind === ts.SyntaxKind.ImportKeyword || ts.isIdentifier(expression) && expression.text === "require" && !candidates.length) {
         addUnresolved("CALLS", from, node.expression, "unsupported");
-      } else if (dynamic) addUnresolved("CALLS", from, node.expression, "dynamic", candidates.map((entry) => entry.record.id));
+      } else if (dynamic || rejectObjectTarget) addUnresolved("CALLS", from, node.expression, "dynamic", candidates.map((entry) => entry.record.id), dispatchFailure);
       else if (candidates.length > 1) addUnresolved("CALLS", from, node.expression, "ambiguous", candidates.map((entry) => entry.record.id));
-      else if (candidates[0]?.callable) addEdge("CALLS", from, candidates[0].record.id, node.expression, undefined, origin?.via);
-      else addUnresolved("CALLS", from, node.expression, candidates.length ? "dynamic" : missingReason(symbol), candidates.map((entry) => entry.record.id));
+      else if (candidates[0]?.callable) addEdge("CALLS", from, candidates[0].record.id, node.expression, undefined, dispatchVia ?? origin?.via);
+      else addUnresolved("CALLS", from, node.expression, candidates.length ? "dynamic" : missingReason(symbol), candidates.map((entry) => entry.record.id), dispatchFailure);
       for (const argument of node.arguments) {
         const unwrapped = unwrap(argument);
         const argumentTargets = byNode.has(unwrapped) ? [byNode.get(unwrapped)!] : targets(symbolAt(unwrapped));
@@ -400,6 +436,7 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
         "Static symbol relations are not runtime execution traces or complete data flow.",
         "Callback arguments are rule candidates, not proven callback execution.",
         "Value-origin calls require const object destructuring from a unique synchronous factory returning one literal object; defaults, rest, writes and alternative returns are not traced.",
+        "Object member value tracing requires a captured literal or fresh factory result with const aliases; member writes, unknown escapes, callbacks and unbound this retain explanatory gaps.",
         "Dynamic dispatch, callable parameters and CommonJS require have no proven direct call edge; anonymous callbacks have their own lexical owner.",
         "Scope is the scanned TS/JS allowlist; bounded in-root project references supply per-project options without expanding the source scope.",
         "Workspace output-to-source redirects require unique compiler output paths; ambiguous configurations and package identities remain explicit gaps.",

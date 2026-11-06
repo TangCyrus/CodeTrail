@@ -19,13 +19,14 @@ const git = (parameters) => execFileSync('git', ['--no-optional-locks', '-c', 'c
 assert.equal(git(['rev-parse', 'HEAD']).trim(), revision, 'Use the pinned TanStack Store revision');
 assert.ok(!/^(?:filter\.|include(?:if\..*)?\.)/im.test(git(['config', '--local', '--no-includes', '--list'])), 'Use a disposable clone without executable filters or included Git configuration');
 assert.equal(git(['status', '--porcelain=v1', '-z']), '', 'Acceptance requires a clean, disposable checkout');
-const core = args.includes('--core');
-const targetPath = core ? 'packages/store/src/alien.ts' : 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
+const core = args.includes('--core'), dispatch = args.includes('--dispatch');
+const targetName = dispatch ? 'createStoreContext.useStoreContext' : core ? 'createReactiveSystem.link' : 'shallow';
+const targetPath = dispatch ? 'packages/preact-store/src/createStoreContext.tsx' : core ? 'packages/store/src/alien.ts' : 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
 const workspaceFile = path.join(project, 'pnpm-workspace.yaml'), workspace = readFileSync(workspaceFile);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.6.0' });
+const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.7.0' });
 const calls = [], proofs = [];
-let overview, comparison, reading, snapshot, result;
+let overview, comparison, reading, snapshot, result, retainedGap;
 async function call(name, parameters) {
   const started = performance.now();
   const response = await client.callTool({ name, arguments: parameters }, { timeout: 90000 });
@@ -45,7 +46,7 @@ try {
   assert.equal(overview.totals.diagnostics > 0, true, 'Missing third-party dependencies must remain visible');
   assert.equal(overview.resolutionSummary.gaps + overview.resolutionSummary.external, overview.statistics.unresolved);
   const pin = { snapshotId: overview.snapshotId };
-  for (const [query, file] of [[core ? 'createReactiveSystem.link' : 'shallow', targetPath], ['createAtom', 'packages/store/src/atom.ts'], ['useCreateAtom', 'packages/react-store/src/useCreateAtom.ts']]) {
+  for (const [query, file] of [[targetName, targetPath], ['createAtom', 'packages/store/src/atom.ts'], ['useCreateAtom', 'packages/react-store/src/useCreateAtom.ts']]) {
     const search = await call('search_symbols', { ...pin, query, limit: 20 });
     const symbol = search.results.find(x => x.name === query && x.path === file); assert.ok(symbol, `${file}#${query}`);
     const context = await call('symbol_context', { ...pin, nodeId: symbol.id, maxNodes: 12 });
@@ -54,6 +55,17 @@ try {
     assert.equal(source.matchesCurrentFile, true); assert.equal(source.fileHash, sha(readFileSync(path.join(project, file))));
   }
   reading = await call('recommend_reading', pin); assert.ok(reading.readingOrder.length > 0);
+  if (dispatch) {
+    const found = await call('search_symbols', {...pin, query:'createAtom.atom.subscribe.e', limit:20});
+    const owner = found.results.find(item=>item.path==='packages/store/src/atom.ts' && item.kind==='function'); assert.ok(owner);
+    const context = await call('symbol_context', {...pin,nodeId:owner.id,maxNodes:6});
+    const gap = context.unresolvedDetails.find(item=>item.reasonDetail?.code==='member-written'); assert.ok(gap,'The conditionally replaced atom.get must remain a gap');
+    const proof = await call('read_evidence', {...pin,evidenceId:gap.reasonDetail.evidenceIds[0],maxLines:8});
+    assert.equal(proof.snapshotId,overview.snapshotId);assert.equal(proof.matchesCurrentFile,true);
+    assert.equal(proof.fileHash,sha(readFileSync(path.join(project,proof.filePath))));
+    assert.ok(proof.lines.some(line=>line.text.includes('atom.get = function')));
+    retainedGap={snapshotId:proof.snapshotId,reasonDetail:gap.reasonDetail,filePath:proof.filePath,fileHash:proof.fileHash};
+  }
   assert.ok(reading.groups.filter(x => x.id === 'entry').flatMap(x => x.items).every(x => !x.node.name.startsWith('<anonymous@')));
   assert.ok(!reading.readingOrder[0].node.name.startsWith('<anonymous@'), 'Error handlers are not architecture entry points');
   // Workspace metadata changes must invalidate the pinned graph independently of source edits.
@@ -62,8 +74,8 @@ try {
     assert.equal((await call('project_overview', {})).stale, true);
   } finally { writeFileSync(workspaceFile, workspace); }
   assert.equal((await call('project_overview', {})).stale, false);
-  const beforeText = core ? 'const prevDep = sub.depsTail' : 'if (Object.is(objA, objB)) {';
-  const afterText = core ? 'const prevDep = (sub.depsTail)' : 'if (objA === objB) {';
+  const beforeText = dispatch ? 'return value' : core ? 'const prevDep = sub.depsTail' : 'if (Object.is(objA, objB)) {';
+  const afterText = dispatch ? 'return (value)' : core ? 'const prevDep = (sub.depsTail)' : 'if (objA === objB) {';
   assert.ok(original.toString('utf8').includes(beforeText));
   writeFileSync(targetFile, original.toString('utf8').replace(beforeText, afterText));
   comparison = await call('compare_worktree', { refresh: true, limit: 2 });
@@ -74,17 +86,17 @@ try {
   const routes = [...comparison.paths];
   let offset = comparison.nextPathOffset;
   while (offset !== null) {
-    const page = await call('compare_worktree', { comparisonId: comparison.comparisonId, pathOffset: offset, limit: 10 });
+    const page = await call('compare_worktree', { comparisonId: comparison.comparisonId, pathOffset: offset, limit: 5 });
     assert.deepEqual(page.snapshotIds, comparison.snapshotIds); assert.equal(page.stale, false);
     routes.push(...page.paths); offset = page.nextPathOffset;
   }
   assert.equal(new Set(routes.map(x => x.id)).size, comparison.totals.paths);
   for (const side of ['base', 'current']) {
-    const route = routes.find(x => x.side === side && x.seed.name === (core ? 'createReactiveSystem.link' : 'shallow')
-      && (core ? /^packages\/store\/src\/(atom|signal)\.ts$/.test(x.target.path) : /^packages\/(react|preact)-store\/tests\//.test(x.target.path)) && x.steps.some(step => step.kind === 'CALLS'));
+    const route = routes.find(x => x.side === side && x.seed.name === targetName
+      && (dispatch ? x.distance === 1 && /^packages\/preact-store\/tests\//.test(x.target.path) : core ? /^packages\/store\/src\/(atom|signal)\.ts$/.test(x.target.path) : /^packages\/(react|preact)-store\/tests\//.test(x.target.path)) && x.steps.some(step => step.kind === 'CALLS'));
     assert.ok(route, `Missing source-backed cross-package ${side} test caller`);
     for (const step of route.steps) {
-      if (core && step.kind === 'CALLS') assert.ok(step.supportingEvidenceIds?.length, 'Core recovered call must retain value-origin proofs');
+      if ((core || dispatch) && step.kind === 'CALLS') assert.ok(step.supportingEvidenceIds?.length, 'Core recovered call must retain value-origin proofs');
       for (const evidenceId of step.supportingEvidenceIds ?? []) {
         const support = await call('read_evidence', {comparisonId: comparison.comparisonId, side, evidenceId, maxLines: 8});
         assert.equal(support.snapshotId, comparison.snapshotIds[side]);
@@ -99,8 +111,8 @@ try {
       assert.equal(text.slice(proof.range.startOffset, proof.range.endOffset), proof.excerpt);
       proofs.push({ side, snapshotId: evidence.snapshotId, filePath: evidence.filePath, fileHash: evidence.fileHash, range: proof.range, excerpt: proof.excerpt, kind: step.kind });
     }
-    const mapping = core ? {oldNode: routes.find(x => x.side === 'base' && x.seed.name === 'createReactiveSystem.link').seed, newNode: routes.find(x => x.side === 'current' && x.seed.name === 'createReactiveSystem.link').seed} : change.symbols.find(x => x.oldNode?.name === 'shallow' && x.newNode?.name === 'shallow'); assert.ok(mapping);
-    const source = await call('read_evidence', { comparisonId: comparison.comparisonId, side, nodeId: mapping[side === 'base' ? 'oldNode' : 'newNode'].id, maxLines: core ? 20 : 8 });
+    const mapping = core || dispatch ? {oldNode: routes.find(x => x.side === 'base' && x.seed.name === targetName).seed, newNode: routes.find(x => x.side === 'current' && x.seed.name === targetName).seed} : change.symbols.find(x => x.oldNode?.name === 'shallow' && x.newNode?.name === 'shallow'); assert.ok(mapping);
+    const source = await call('read_evidence', { comparisonId: comparison.comparisonId, side, nodeId: mapping[side === 'base' ? 'oldNode' : 'newNode'].id, maxLines: core || dispatch ? 20 : 8 });
     assert.equal(source.snapshotId, comparison.snapshotIds[side]); assert.equal(source.fileHash, sha(side === 'base' ? original : readFileSync(targetFile)));
     assert.equal(source.matchesCurrentFile, side === 'current');
     assert.ok(source.lines.some(x => x.text.includes(side === 'base' ? beforeText : afterText)));
@@ -132,8 +144,8 @@ try {
     fixedCorpus = { identicalFilesAndHashes: true, before: before.statistics, after: snapshot.statistics,
       diagnostics: { before: before.diagnostics.length, after: snapshot.diagnostics.length } };
   }
-  result = { passed: true, repository: 'https://github.com/TanStack/store', revision, run, project, core, modelCalls: 0,
-    snapshotId: overview.snapshotId, status: overview.status, statistics: overview.statistics, diagnostics: overview.totals.diagnostics,
+  result = { passed: true, repository: 'https://github.com/TanStack/store', revision, run, project, core, dispatch, modelCalls: 0,
+    snapshotId: overview.snapshotId, status: overview.status, statistics: overview.statistics, diagnostics: overview.totals.diagnostics, ...(retainedGap ? {retainedGap} : {}),
     reading: reading.readingOrder.map(x => ({ name: x.node.name, path: x.node.path })),
     comparison: { id: comparison.comparisonId, snapshotIds: comparison.snapshotIds, status: comparison.status, statistics: comparison.statistics,
       truncated: comparison.truncated, paths: routes.length, crossPackageProofs: proofs },

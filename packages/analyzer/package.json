@@ -1,6 +1,6 @@
 {
   "name": "@codetrail/analyzer",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,7 +10,7 @@
     }
   },
   "dependencies": {
-    "@codetrail/shared": "0.6.0",
+    "@codetrail/shared": "0.7.0",
     "ignore": "7.0.5",
     "typescript": "5.9.3",
     "yaml": "2.9.1"

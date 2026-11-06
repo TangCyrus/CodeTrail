@@ -45,7 +45,7 @@ function request(method, params) {
 }
 let result;
 try {
-  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.6.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
+  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.7.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
   child.stdin.write(JSON.stringify({ method: "initialized", params: {} }) + "\n");
   const skills = await request("skills/list", { cwds: [project], forceReload: true });
   writeFileSync(path.join(run, "skills-discovery.json"), JSON.stringify(skills, null, 2));

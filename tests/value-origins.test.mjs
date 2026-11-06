@@ -58,8 +58,10 @@ test('writes, defaults, rest, async, overload-only types and alternative returns
     export function use(){ mutable(); fallback(); rest.run(); alternate(); asyncRun(); spread(); replaced(); typed(); source.run() }
   ` });
   const snapshot = project.analyze(), use = findSymbol(snapshot, 'index.ts', 'use');
-  assert.equal(snapshot.relations.filter(e => e.from === use.id && e.kind === 'CALLS').length, 0);
-  assert.equal(snapshot.unresolved.filter(e => e.from === use.id && e.kind === 'CALLS').length, 9);
+  const calls = snapshot.relations.filter(e => e.from === use.id && e.kind === 'CALLS');
+  assert.equal(calls.length, 1); // Concrete object value wins over the misleading typeof first signature.
+  assert.equal(calls[0].to, findSymbol(snapshot, 'index.ts', 'second').id);
+  assert.equal(snapshot.unresolved.filter(e => e.from === use.id && e.kind === 'CALLS').length, 8);
 });
 
 test('external targets and real gaps have separate complete counts, including legacy snapshots', t => {

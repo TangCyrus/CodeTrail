@@ -165,6 +165,22 @@ test("comparison persistence survives snapshot pruning; stale HEAD and source ed
   assert.equal(readdirSync(temp).length, 0);
 });
 
+test("cancelling an active baseline isolate releases its files and a later comparison preserves identical graph facts", async (t) => {
+  const {fixture,manager,store}=await setup(t,false);
+  for(let index=0;index<70;index++)fixture.write(`src/baseline-${index}.ts`,`export const value${index}=${index};`);
+  gitCommand(fixture.root,["add","--all"]);gitCommand(fixture.root,["commit","--quiet","-m","Baseline isolate corpus"]);
+  const job=manager.start();
+  for(let index=0;index<1000&&manager.job(job.id).phase!=="baseline";index++)await delay(5);
+  await delay(100);
+  assert.equal(manager.job(job.id).phase,"baseline");
+  assert.equal(await manager.cancel(job.id),true);
+  assert.equal(manager.job(job.id).status,"cancelled");
+  assert.equal(readdirSync(path.join(store.directory,"comparison-temp")).length,0);
+  const bundle=await done(manager,manager.start());
+  assert.equal(bundle.report.changes.length,0);
+  for(const field of ["files","symbols","relations","evidence","unresolved"])assert.deepEqual(bundle.base.snapshot[field],bundle.current.snapshot[field],field);
+});
+
 test("CRLF checkout conversion alone produces no code change while the captured versions retain exact bytes", async (t) => {
   const { fixture, manager } = await setup(t, false);
   for (const [name, content] of Object.entries(fixture.files)) fixture.write(name, content.replaceAll("\n", "\r\n"));

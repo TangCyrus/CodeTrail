@@ -232,6 +232,8 @@ h1 { font-size: 22px; font-weight: 600; line-height: 1.4; letter-spacing: -.3px;
 .unresolved-row { display: flex; justify-content: space-between; width: 100%; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); text-align: left; font-size: 11px; }
 .unresolved-row code { max-width: 65%; overflow: hidden; text-overflow: ellipsis; }
 .unresolved-row span { color: var(--muted); white-space: nowrap; }
+.dispatch-gap { margin-bottom: 16px; }
+.dispatch-gap .panel-note { margin: 8px 0; line-height: 1.6; }
 .section-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .section-heading h3 { font-size: 16px; font-weight: 500; }
 .edge-definition { font-size: 13px; }

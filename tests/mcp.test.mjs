@@ -71,6 +71,27 @@ test("real stdio handshake exposes six read-only tools and a complete source-bac
   assert.doesNotMatch(stderr(), /Error|SyntaxError/);
 });
 
+test("object dispatch exposes concrete source proofs and explanatory gap evidence through real stdio", async (t) => {
+  const project = tempProject(t, {"index.ts": `interface API{run():void}
+    const stable:API={run(){}}; const changed:API={run(){}}; changed.run=()=>{};
+    export function use(receiver:API){stable.run();changed.run();receiver.run()}`});
+  const {call} = await start(t, {project});
+  const overview = await call("project_overview", {refresh:true});
+  const pin = {snapshotId:overview.snapshotId};
+  const found = await call("search_symbols", {...pin,query:"use"});
+  const node = found.results.find(item=>item.name==="use");
+  const context = await call("symbol_context", {...pin,nodeId:node.id,maxNodes:10});
+  const edge = context.edges.find(item=>item.kind==="CALLS");
+  assert.ok(edge.supportingEvidenceIds.length);
+  assert.deepEqual(new Set(context.unresolvedDetails.map(item=>item.reasonDetail?.code)),new Set(["member-written","receiver-parameter"]));
+  for(const gap of context.unresolvedDetails){
+    const evidenceId = gap.reasonDetail.evidenceIds[0];
+    const proof = await call("read_evidence", {...pin,evidenceId,maxLines:8});
+    assert.equal(proof.snapshotId,overview.snapshotId);assert.equal(proof.matchesCurrentFile,true);
+    assert.ok(proof.evidence.some(item=>item.id===evidenceId));
+  }
+});
+
 test("edits mark pinned results stale; explicit refresh preserves the old source snapshot", async (t) => {
   const { call, project } = await start(t);
   const first = await call("project_overview");

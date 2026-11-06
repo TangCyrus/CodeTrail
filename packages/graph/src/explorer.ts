@@ -151,7 +151,7 @@ export class ProjectExplorer {
     const outgoing = connections("outgoing");
     const proofs = new Map(this.snapshot.evidence.map((proof) => [proof.id, proof]));
     const unlinked = this.snapshot.unresolved.filter(item => item.from === id);
-    const details = (external: boolean): NodeDetail["unresolved"] => unlinked.filter(item => (item.reason === "external") === external).slice(0, 30).map(item => ({ id: item.id, kind: item.kind, reason: item.reason, excerpt: proofs.get(item.evidenceId)!.excerpt, evidenceId: item.evidenceId }));
+    const details = (external: boolean): NodeDetail["unresolved"] => unlinked.filter(item => (item.reason === "external") === external).slice(0, 30).map(item => ({ id: item.id, kind: item.kind, reason: item.reason, excerpt: proofs.get(item.evidenceId)!.excerpt, evidenceId: item.evidenceId, ...(item.reasonDetail ? { reasonDetail: item.reasonDetail } : {}) }));
     return {
       node, files: node.kind === "module" ? this.files.filter((file) => file.moduleId === id) : [],
       symbols: node.kind === "file" ? [...this.nodes.values()].filter((item) => item.fileId === id && item.id !== id && this.significant(item)) : [],
