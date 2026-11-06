@@ -1,4 +1,4 @@
-# Agent 接入说明（0.3.0）
+# Agent 接入说明（0.4.0）
 
 CodeTrail 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 查询架构、阅读顺序、符号关系、源码证据及 Git 改动影响。浏览器工作台仍可独立运行，也可以与 MCP 共用快照。
 
@@ -20,7 +20,7 @@ npm ci --ignore-scripts
 npm run build
 ```
 
-预编译 **0.3.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
+预编译 **0.4.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
 
 ## 生成接入包
 

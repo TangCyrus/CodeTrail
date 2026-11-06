@@ -1,6 +1,6 @@
 {
   "name": "codetrail",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Source-backed code context and change impact for coding agents",
@@ -31,7 +31,8 @@
     "validate:acceptance": "npm run build && node --test tests/acceptance.test.mjs tests/reliability.test.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
     "release": "npm run build && node scripts/package-mvp.mjs",
-    "verify:release": "node scripts/verify-release.mjs"
+    "verify:release": "node scripts/verify-release.mjs",
+    "validate:monorepo": "npm run build:server && node scripts/validate-monorepo.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",

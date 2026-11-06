@@ -86,7 +86,7 @@ export interface AnalysisSnapshot {
   status: "complete" | "partial";
   stale: boolean;
   analyzer: { name: string; version: string; compilerVersion: string };
-  configuration: { path: string | null; hash: string; inputs?: { path: string; hash: string }[] };
+  configuration: { path: string | null; hash: string; inputs?: { path: string; hash: string }[]; missingInputs?: string[] };
   scope?: { maxFiles: number; maxFileBytes: number };
   files: SourceFileRecord[];
   symbols: SymbolRecord[];

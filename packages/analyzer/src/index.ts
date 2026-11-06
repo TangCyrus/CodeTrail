@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import ts from "typescript";
@@ -6,7 +6,7 @@ import { assertSnapshotIntegrity, type AnalysisSnapshot, type AnalyzerAdapter, t
 import { createCompiler, rangeOf } from "./compiler.js";
 import { hash, scanProject, slash, within } from "./scan.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }
@@ -76,11 +76,18 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
     hooks.onSources?.([...scan.files.values()].map((file) => ({ path: file.path, content: file.text, hash: file.hash })));
     hooks.onProgress?.("compiling");
     const compiler = createCompiler(scan);
-    const { checker, program } = compiler;
+    let checker!: ts.TypeChecker;
+    let program!: ts.Program;
+    const environments = new Map(compiler.files.map((entry) => [entry.source, entry]));
+    function activate(file: ts.SourceFile): void {
+      const environment = environments.get(file)!;
+      checker = environment.checker; program = environment.program;
+    }
     const diagnostics = [...scan.diagnostics, ...compiler.diagnostics];
-    const sourceFiles = program.getSourceFiles().filter((file) => scan.files.has(path.resolve(file.fileName))).sort((a, b) => a.fileName.localeCompare(b.fileName, "en"));
+    const sourceFiles = compiler.files.map((entry) => entry.source);
     const files: SourceFileRecord[] = sourceFiles.map((file) => {
       const scanned = scan.files.get(path.resolve(file.fileName))!;
+      activate(file);
       return {
         id: shortId("file", scanned.path), path: scanned.path, hash: scanned.hash,
         language: path.extname(scanned.path).slice(1) as SourceFileRecord["language"],
@@ -95,6 +102,8 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
     const registered: Registered[] = [];
     const byNode = new Map<ts.Node, Registered>();
     const bySymbol = new Map<ts.Symbol, Registered[]>();
+    const byDeclaration = new Map<string, Registered[]>();
+    const declarationKey = (node: ts.Node): string => `${path.resolve(node.getSourceFile().fileName)}:${node.pos}:${node.end}:${node.kind}`;
     const owners = new Map<ts.Node, string>();
     hooks.onProgress?.("extracting");
 
@@ -217,8 +226,12 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       }
       ts.forEachChild(node, (child) => collect(child, nextParent, nextScope));
     }
-    for (const source of sourceFiles) collect(source, fileByAbsolute.get(path.resolve(source.fileName))!.id, "");
-    for (const entry of registered) addEdge("CONTAINS", entry.record.parentId, entry.record.id, entry.node);
+    for (const source of sourceFiles) { activate(source); collect(source, fileByAbsolute.get(path.resolve(source.fileName))!.id, ""); }
+    for (const entry of registered) {
+      const key = declarationKey(entry.node);
+      byDeclaration.set(key, [...(byDeclaration.get(key) ?? []), entry]);
+      addEdge("CONTAINS", entry.record.parentId, entry.record.id, entry.node);
+    }
 
     function symbolAt(expression: ts.Node): ts.Symbol | undefined {
       if (ts.isShorthandPropertyAssignment(expression.parent)) return canonical(checker.getShorthandAssignmentValueSymbol(expression.parent));
@@ -227,11 +240,14 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
     }
     function targets(symbol: ts.Symbol | undefined): Registered[] {
       if (!symbol) return [];
-      const entries = bySymbol.get(symbol) ?? (symbol.declarations ?? []).flatMap((declaration) => byNode.get(declaration) ?? []);
+      // Independent TS programs have different Symbol/Node objects for the same captured declaration.
+      // Join only exact source positions, never names or generated declaration text.
+      const entries = bySymbol.get(symbol) ?? (symbol.declarations ?? []).flatMap((declaration) => byNode.get(declaration) ?? byDeclaration.get(declarationKey(declaration)) ?? []);
       return [...new Map(entries.map((entry) => [entry.record.id, entry])).values()];
     }
     // Public exports can be declared separately (export { local }) or through a barrel.
     for (const source of sourceFiles) {
+      activate(source);
       const moduleSymbol = checker.getSymbolAtLocation(source);
       if (!moduleSymbol) continue;
       for (const exported of checker.getExportsOfModule(moduleSymbol)) {
@@ -322,7 +338,7 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       }
       ts.forEachChild(node, inspect);
     }
-    for (const file of sourceFiles) inspect(file);
+    for (const file of sourceFiles) { activate(file); inspect(file); }
     hooks.onProgress?.("verifying");
     // Re-scan the allowlist to catch new/deleted files and changed ignore rules as well as edits.
     const refreshed = scanProject(request);
@@ -333,6 +349,7 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       try { if (!within(scan.root, realpathSync(input.path)) || hash(readFileSync(input.path, "utf8")) !== input.hash) stale = true; }
       catch { stale = true; }
     }
+    if (compiler.missingInputs.some((file) => existsSync(file))) stale = true;
     if (stale) diagnostics.push({ code: "STALE_INPUT", severity: "warning", message: "Source changed during analysis; refresh before using source positions." });
     const symbolRecords = registered.map((entry) => entry.record);
     const relationRecords = [...relations.values()];
@@ -343,7 +360,7 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       rootDir: scan.root, createdAt: new Date().toISOString(),
       status: stale || diagnostics.some((entry) => entry.severity === "error" || entry.severity === "warning") ? "partial" : "complete",
       stale, analyzer: { name: this.name, version: VERSION, compilerVersion: ts.version },
-      configuration: { ...compiler.configuration, inputs: compiler.configInputs.map((input) => ({ path: slash(path.relative(scan.root, input.path)), hash: input.hash })) },
+      configuration: { ...compiler.configuration, inputs: compiler.configInputs.map((input) => ({ path: slash(path.relative(scan.root, input.path)), hash: input.hash })), missingInputs: compiler.missingInputs.map((file) => slash(path.relative(scan.root, file))) },
       scope: { maxFiles: request.maxFiles ?? 500, maxFileBytes: request.maxFileBytes ?? 1024 * 1024 },
       files, symbols: symbolRecords,
       relations: relationRecords, evidence: [...evidence.values()], unresolved: unresolvedRecords,
@@ -353,7 +370,8 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
         "Static symbol relations are not runtime execution traces or complete data flow.",
         "Callback arguments are rule candidates, not proven callback execution.",
         "Dynamic dispatch, callable parameters and CommonJS require have no proven direct call edge; anonymous callbacks have their own lexical owner.",
-        "Scope is the scanned TS/JS allowlist; tsconfig supplies options, not include/exclude scope or project-reference traversal.",
+        "Scope is the scanned TS/JS allowlist; bounded in-root project references supply per-project options without expanding the source scope.",
+        "Workspace output-to-source redirects require unique compiler output paths; ambiguous configurations and package identities remain explicit gaps.",
         "Third-party declarations may inform types inside the root; dependency implementations are not indexed.",
         "Complete means the analysis pass completed without reported errors; unresolved relations remain separately visible.",
       ],
@@ -372,6 +390,7 @@ export const analyzeProject = (request: AnalyzeRequest, hooks?: AnalyzerHooks): 
 /** A bounded scan only: no compiler and no execution. Compare source scope and configuration inputs. */
 export function isSnapshotStale(snapshot: AnalysisSnapshot): boolean {
   if (snapshot.stale) return true;
+  if (snapshot.analyzer.name === "typescript-compiler" && snapshot.analyzer.version !== VERSION) return true;
   try {
     const scan = scanProject({ rootDir: snapshot.rootDir, ...snapshot.scope });
     if (scan.files.size !== snapshot.files.length) return true;
@@ -382,6 +401,10 @@ export function isSnapshotStale(snapshot: AnalysisSnapshot): boolean {
       const absolute = path.resolve(snapshot.rootDir, input.path);
       if (!within(snapshot.rootDir, absolute) || !within(snapshot.rootDir, realpathSync(absolute))) return true;
       if (hash(readFileSync(absolute, "utf8")) !== input.hash) return true;
+    }
+    for (const missing of snapshot.configuration.missingInputs ?? []) {
+      const absolute = path.resolve(snapshot.rootDir, missing);
+      if (!within(snapshot.rootDir, absolute) || existsSync(absolute)) return true;
     }
     const knownInputs = new Set(snapshot.configuration.inputs?.map((input) => input.path));
     for (const name of [...scan.configTexts.keys(), path.join(snapshot.rootDir, "tsconfig.json"), path.join(snapshot.rootDir, "jsconfig.json")]) {
