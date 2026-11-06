@@ -22,7 +22,7 @@ assert.equal(git(['status', '--porcelain=v1', '-z']), '', 'Acceptance requires a
 const targetPath = 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
 const workspaceFile = path.join(project, 'pnpm-workspace.yaml'), workspace = readFileSync(workspaceFile);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.4.1' });
+const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.5.0' });
 const calls = [], proofs = [];
 let overview, comparison, reading, snapshot, result;
 async function call(name, parameters) {

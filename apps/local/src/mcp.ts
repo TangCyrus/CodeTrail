@@ -11,7 +11,7 @@ import type { AnalysisSnapshot, ExplorerNode } from "@codetrail/shared";
 import { AnalysisManager } from "./analysis-manager.js";
 import { ComparisonManager } from "./comparison-manager.js";
 
-export const MCP_VERSION = "0.4.1";
+export const MCP_VERSION = "0.5.0";
 export const MCP_RESULT_CHARACTERS = 48_000;
 const id = z.string().min(1).max(512);
 const pinned = { snapshotId: id.describe("Exact snapshotId returned by project_overview; never substitute another snapshot.") };

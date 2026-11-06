@@ -4,6 +4,7 @@ import ts from "typescript";
 import type { AnalysisDiagnostic, SourceRange } from "@codetrail/shared";
 import { hash, slash, within, type ScanResult } from "./scan.js";
 import { pnpmPatterns } from "./workspace.js";
+import { sveltePackageEntries, tsdownEntries } from "./build-entries.js";
 
 export function rangeOf(file: ts.SourceFile, start: number, end: number): SourceRange {
   const first = file.getLineAndCharacterOfPosition(start), last = file.getLineAndCharacterOfPosition(end);
@@ -221,6 +222,30 @@ export function createCompiler(scan: ScanResult): CompilerContext {
       diagnostic("WORKSPACE_INSTALL_CONFLICT", `Installed package ${name} does not point at the declared workspace; installed resolution is preserved.`); continue;
     }
     aliases.set(alias, target);
+    const manifest = manifests.get(path.join(target, "package.json"))!;
+    const build = manifest.scripts && typeof manifest.scripts === "object" ? (manifest.scripts as Record<string, unknown>).build : undefined;
+    const dependencies = { ...(manifest.dependencies as object ?? {}), ...(manifest.devDependencies as object ?? {}) } as Record<string, unknown>;
+    if (typeof build === "string" && build.startsWith("svelte-package") && typeof dependencies["@sveltejs/package"] === "string") {
+      try {
+        const mappings = sveltePackageEntries(build, target, [...scan.files.keys()]);
+        if (mappings.some((mapping) => captured.has(pathKey(mapping.output)) && pathKey(mapping.output) !== pathKey(mapping.source))) throw new Error("Build output collides with source");
+        for (const mapping of mappings) mapOutput(mapping.output, mapping.source);
+      } catch { diagnostic("BUILD_ENTRY_UNSUPPORTED", "svelte-package mapping requires explicit literal --input/--output paths inside its package, with no command overrides.", path.join(target, "package.json")); }
+    }
+    const configFile = path.join(target, "tsdown.config.ts");
+    // Build source must already be in the captured allowlist. Excluded configuration is not loaded as code.
+    const config = captured.get(pathKey(configFile));
+    if (!config) { if (!existsSync(configFile)) missingInputs.add(configFile); continue; }
+    configReads.set(configFile, config.text);
+    try {
+      const mappings = tsdownEntries(config.text, target, manifest.type, build);
+      if (mappings.some((mapping) => captured.has(pathKey(mapping.output)) && pathKey(mapping.output) !== pathKey(mapping.source))) throw new Error("Build output collides with scanned source");
+      for (const mapping of mappings) {
+        if (captured.has(pathKey(mapping.source))) mapOutput(mapping.output, captured.get(pathKey(mapping.source))!.absolutePath);
+      }
+    } catch {
+      diagnostic("BUILD_ENTRY_UNSUPPORTED", "Build entry mapping requires a literal supported tsdown configuration and command; plugins, dynamic values and output overrides are not evaluated.", configFile);
+    }
   }
   function physical(name: string): string {
     const location = absolute(name);
@@ -255,6 +280,10 @@ export function createCompiler(scan: ScanResult): CompilerContext {
     const group = groups.get(key) ?? { options, roots: [] }; group.roots.push(source); groups.set(key, group);
   }
   const files: CompilerFile[] = [];
+  // TS's document registry shares declaration syntax across compatible language environments.
+  // Project source ASTs/checkers remain independent; each analysis gets a fresh registry.
+  const declarations = ts.createDocumentRegistry(ts.sys.useCaseSensitiveFileNames, scan.root);
+  const declarationVersions = new Map<string, { snapshot: ts.IScriptSnapshot; version: string }>();
   for (const { options, roots } of groups.values()) {
     const host = ts.createCompilerHost(options, true);
     host.getCurrentDirectory = () => scan.root;
@@ -265,7 +294,16 @@ export function createCompiler(scan: ScanResult): CompilerContext {
       try { return readdirSync(name, { withFileTypes: true }).filter((entry) => entry.isDirectory() && safeExisting(path.join(name, entry.name))).map((entry) => entry.name); } catch { return []; }
     };
     host.realpath = (name) => safeExisting(name) ? realpathSync(name) : name;
-    host.getSourceFile = (name, languageVersion) => { const text = readAllowed(name); return text === undefined ? undefined : ts.createSourceFile(name, text, languageVersion, true); };
+    host.getSourceFile = (name, languageVersion) => {
+      const text = readAllowed(name);
+      if (text === undefined) return undefined;
+      if (/\.d\.[cm]?ts$/.test(name) && !captured.has(pathKey(name))) {
+        let document = declarationVersions.get(pathKey(name));
+        if (!document) { document = { snapshot: ts.ScriptSnapshot.fromString(text), version: hash(text) }; declarationVersions.set(pathKey(name), document); }
+        return declarations.acquireDocument(name, options, document.snapshot, document.version, ts.ScriptKind.TS, languageVersion);
+      }
+      return ts.createSourceFile(name, text, languageVersion, true);
+    };
     host.writeFile = () => { throw new Error("Analysis cannot emit into the target project"); };
     host.resolveModuleNameLiterals = (literals, containingFile, _reference, _options, source) => literals.map((literal) => {
       const environment = ownerByPath.get(pathKey(containingFile))?.options ?? options;

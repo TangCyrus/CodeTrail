@@ -6,7 +6,7 @@ import { assertSnapshotIntegrity, type AnalysisSnapshot, type AnalyzerAdapter, t
 import { createCompiler, rangeOf } from "./compiler.js";
 import { hash, scanProject, slash, within } from "./scan.js";
 
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }
@@ -372,6 +372,7 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
         "Dynamic dispatch, callable parameters and CommonJS require have no proven direct call edge; anonymous callbacks have their own lexical owner.",
         "Scope is the scanned TS/JS allowlist; bounded in-root project references supply per-project options without expanding the source scope.",
         "Workspace output-to-source redirects require unique compiler output paths; ambiguous configurations and package identities remain explicit gaps.",
+        "Unbuilt workspace entries may use literal supported tsdown metadata or explicit svelte-package input/output paths; dynamic build configuration is not executed or inferred.",
         "Third-party declarations may inform types inside the root; dependency implementations are not indexed.",
         "Complete means the analysis pass completed without reported errors; unresolved relations remain separately visible.",
       ],

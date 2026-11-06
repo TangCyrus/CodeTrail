@@ -1,0 +1,33 @@
+{
+  "name": "codetrail-tanstack-declaration-profile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Explicit dependency preparation for declaration analysis; direct versions taken from TanStack Store 53f30be's lockfile",
+  "dependencies": {
+    "@angular/common": "22.2.2",
+    "@angular/core": "22.2.2",
+    "@angular/platform-browser": "22.2.2",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/preact": "3.2.4",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/svelte": "5.3.1",
+    "@testing-library/user-event": "14.6.1",
+    "@tsconfig/svelte": "5.0.8",
+    "@types/node": "26.6.4",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/use-sync-external-store": "1.5.0",
+    "lit": "3.3.2",
+    "octane": "0.12.1",
+    "preact": "10.29.1",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "rxjs": "7.8.2",
+    "solid-js": "1.9.12",
+    "svelte": "5.55.7",
+    "use-sync-external-store": "1.6.0",
+    "vitest": "4.1.11",
+    "vue": "3.5.43",
+    "vue-demi": "0.14.10"
+  }
+}
