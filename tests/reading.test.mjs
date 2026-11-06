@@ -61,6 +61,17 @@ test("tests and generated source do not dominate recommendations and call cycles
   assert.ok(result.readingOrder.length <= 10);
 });
 
+test("anonymous error callbacks in a main file are not promoted to architectural entry points", (t) => {
+  const project = tempProject(t, {
+    'examples/angular/main.ts': "import { bootstrap } from '../../core'; bootstrap().catch((error) => console.error(error));",
+    'core.ts': 'export function bootstrap(): Promise<void> { return Promise.resolve(); }',
+  });
+  const result = recommendReading(project.analyze());
+  assert.equal(result.groups.find(x => x.id === 'entry').items.length, 0);
+  assert.equal(result.readingOrder[0].node.name, 'bootstrap');
+  assert.ok(result.readingOrder.every(x => x.kind !== 'entry' || !x.node.name.startsWith('<anonymous@')));
+});
+
 test("bookmarks retain explicit read state across snapshots and never resolve a moved node by guessing", (t) => {
   let store;
   t.after(() => store?.close());

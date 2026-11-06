@@ -6,7 +6,7 @@ import { assertSnapshotIntegrity, type AnalysisSnapshot, type AnalyzerAdapter, t
 import { createCompiler, rangeOf } from "./compiler.js";
 import { hash, scanProject, slash, within } from "./scan.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }

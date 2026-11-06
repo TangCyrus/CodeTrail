@@ -3,6 +3,7 @@ import path from "node:path";
 import ts from "typescript";
 import type { AnalysisDiagnostic, SourceRange } from "@codetrail/shared";
 import { hash, slash, within, type ScanResult } from "./scan.js";
+import { pnpmPatterns } from "./workspace.js";
 
 export function rangeOf(file: ts.SourceFile, start: number, end: number): SourceRange {
   const first = file.getLineAndCharacterOfPosition(start), last = file.getLineAndCharacterOfPosition(end);
@@ -23,7 +24,7 @@ export function createCompiler(scan: ScanResult): CompilerContext {
   const diagnostics: AnalysisDiagnostic[] = [], reported = new Set<string>();
   const libraryRoot = path.dirname(ts.getDefaultLibFilePath({}));
   const configReads = new Map(scan.configTexts), auxiliary = new Map<string, string>();
-  const missingInputs = new Set<string>(), dependencyRoots = new Set<string>();
+  const missingInputs = new Set<string>(), dependencyRoots = new Set<string>(), missingPaths = new Set<string>();
   const defaults: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler, jsx: ts.JsxEmit.Preserve,
     strict: true, allowJs: true, checkJs: false, noEmit: true, skipLibCheck: true, types: [] };
@@ -37,8 +38,15 @@ export function createCompiler(scan: ScanResult): CompilerContext {
   function safeExisting(name: string): boolean {
     const location = absolute(name);
     if (!within(scan.root, location) && !within(libraryRoot, location)) return false;
+    if (missingPaths.has(pathKey(location))) return false;
     try { const real = realpathSync(location); return within(scan.root, real) || within(libraryRoot, real); }
-    catch { return false; }
+    catch (error) {
+      if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) {
+        missingPaths.add(pathKey(location));
+        if (within(scan.root, location)) missingInputs.add(location);
+      }
+      return false;
+    }
   }
   function readAllowed(name: string): string | undefined {
     const location = absolute(name), source = captured.get(pathKey(location));
@@ -48,7 +56,8 @@ export function createCompiler(scan: ScanResult): CompilerContext {
     const isLib = within(libraryRoot, location) && /\.d\.ts$/.test(location);
     const isDependency = /\.d\.[cm]?ts$/.test(location) && (slash(location).split("/").includes("node_modules") || [...dependencyRoots].some((root) => within(root, location)));
     const isJson = /\.json$/i.test(location) && within(scan.root, location);
-    if (!isLib && !isDependency && !isJson) return undefined;
+    const isWorkspace = pathKey(location) === pathKey(path.join(scan.root, "pnpm-workspace.yaml"));
+    if (!isLib && !isDependency && !isJson && !isWorkspace) return undefined;
     try {
       if (lstatSync(location).isSymbolicLink()) return undefined;
       const text = readFileSync(location, "utf8"), real = realpathSync(location);
@@ -61,7 +70,7 @@ export function createCompiler(scan: ScanResult): CompilerContext {
           if (safeExisting(packageRoot) && realpathSync(packageRoot) !== scan.root) dependencyRoots.add(realpathSync(packageRoot));
         }
       }
-      if (isJson || isDependency && !isLib) configReads.set(real, text);
+      if (isJson || isWorkspace || isDependency && !isLib) configReads.set(real, text);
       return text;
     } catch { return undefined; }
   }
@@ -184,7 +193,14 @@ export function createCompiler(scan: ScanResult): CompilerContext {
     catch { diagnostic("WORKSPACE_MANIFEST_INVALID", "Package manifest is invalid JSON.", file); }
   }
   const workspaceValue = manifests.get(path.join(scan.root, "package.json"))?.workspaces;
-  const patterns = Array.isArray(workspaceValue) ? workspaceValue : workspaceValue && typeof workspaceValue === "object" ? (workspaceValue as { packages?: unknown }).packages : [];
+  let patterns: unknown = Array.isArray(workspaceValue) ? workspaceValue : workspaceValue && typeof workspaceValue === "object" ? (workspaceValue as { packages?: unknown }).packages : [];
+  const workspacePath = path.join(scan.root, "pnpm-workspace.yaml"), workspaceText = readMetadata(workspacePath);
+  if (workspaceText !== undefined) {
+    try { patterns = pnpmPatterns(workspaceText); }
+    catch { patterns = []; diagnostic("WORKSPACE_CONFIG_INVALID", "pnpm-workspace.yaml requires bounded literal package patterns; invalid YAML, aliases, tags and out-of-root patterns are not resolved.", workspacePath); }
+  } else if (existsSync(workspacePath)) {
+    patterns = []; diagnostic("WORKSPACE_CONFIG_UNREADABLE", "pnpm-workspace.yaml cannot be read inside the selected root.", workspacePath);
+  }
   const names = new Map<string, string[]>();
   for (const [file, manifest] of manifests) {
     const directory = path.dirname(file), relative = slash(path.relative(scan.root, directory));
@@ -212,18 +228,25 @@ export function createCompiler(scan: ScanResult): CompilerContext {
     return location;
   }
   const redirected = (name: string): string => outputSources.get(pathKey(physical(name))) ?? physical(name);
+  const directoryCache = new Map<string, boolean>();
   const resolutionHost: ts.ModuleResolutionHost = {
     fileExists: (name) => readAllowed(redirected(name)) !== undefined,
     readFile: (name) => readAllowed(redirected(name)),
     directoryExists: (name) => {
       const location = physical(name);
       if (outputDirectories.has(pathKey(location)) || within(scan.root, absolute(name)) && [...aliases.keys()].some((alias) => within(absolute(name), alias))) return true;
-      try { return safeExisting(location) && statSync(location).isDirectory(); } catch { return false; }
+      const key = pathKey(location), cached = directoryCache.get(key);
+      if (cached !== undefined) return cached;
+      let directory = false;
+      try { directory = safeExisting(location) && statSync(location).isDirectory(); } catch { /* Not a readable directory. */ }
+      directoryCache.set(key, directory);
+      return directory;
     },
     realpath: (name) => { const location = redirected(name); return safeExisting(location) ? realpathSync(location) : location; },
     getCurrentDirectory: () => scan.root,
   };
   const groups = new Map<string, { options: ts.CompilerOptions; roots: string[] }>();
+  const resolutionCaches = new Map<ts.CompilerOptions, ts.ModuleResolutionCache>();
   for (const [source, project] of owners) {
     const options: ts.CompilerOptions = { ...project.options, allowJs: true, noEmit: true, declaration: false, declarationMap: false,
       emitDeclarationOnly: false, composite: false, incremental: false, isolatedDeclarations: false, skipLibCheck: true, rootDir: scan.root };
@@ -246,7 +269,12 @@ export function createCompiler(scan: ScanResult): CompilerContext {
     host.writeFile = () => { throw new Error("Analysis cannot emit into the target project"); };
     host.resolveModuleNameLiterals = (literals, containingFile, _reference, _options, source) => literals.map((literal) => {
       const environment = ownerByPath.get(pathKey(containingFile))?.options ?? options;
-      const result = ts.resolveModuleName(literal.text, containingFile, environment, resolutionHost, undefined, undefined, ts.getModeForUsageLocation(source, literal, environment));
+      let cache = resolutionCaches.get(environment);
+      if (!cache) {
+        cache = ts.createModuleResolutionCache(scan.root, (name) => ts.sys.useCaseSensitiveFileNames ? name : name.toLowerCase(), environment);
+        resolutionCaches.set(environment, cache);
+      }
+      const result = ts.resolveModuleName(literal.text, containingFile, environment, resolutionHost, cache, undefined, ts.getModeForUsageLocation(source, literal, environment));
       const resolved = result.resolvedModule;
       if (!resolved) return result;
       const location = captured.get(pathKey(redirected(resolved.resolvedFileName)))?.absolutePath;

@@ -6,13 +6,13 @@
 
 从旧版本升级时，命令、MCP 服务名、Skill、环境变量及忽略文件需要一起切换，见 [0.3.0 迁移说明](docs/命名迁移说明.md)。
 
-当前为 **0.4.0 本地 Agent 接入试用版**：提供六个 MCP 工具、理解项目与改动影响两个 Skill，支持根目录内 project references 和工作区包的源码解析。首个验收宿主为 Codex，浏览器工作台可独立使用或共享 MCP 快照。真实用户效果和模型自主调用、语义解释质量仍待验证。
+当前为 **0.4.1 本地 Agent 接入试用版**：提供六个 MCP 工具、理解项目与改动影响两个 Skill，支持根目录内 project references 和工作区包的源码解析。首个验收宿主为 Codex，浏览器工作台可独立使用或共享 MCP 快照。真实用户效果和模型自主调用、语义解释质量仍待验证。
 
-Agent 接入见 [Agent 接入说明](docs/Agent接入说明.md)，独立工作台见 [MVP 安装说明](docs/MVP安装说明.md)，能力边界见 [已知限制](docs/已知限制.md)。Windows 0.4.0 预编译 ZIP 包含 MCP、Skill 和生产依赖；需本机 Node.js 24.x，Git 用于可选的改动比较，无需重新 npm 安装或构建。历史 0.1.0 ZIP 不含 Agent 接入功能。
+Agent 接入见 [Agent 接入说明](docs/Agent接入说明.md)，独立工作台见 [MVP 安装说明](docs/MVP安装说明.md)，能力边界见 [已知限制](docs/已知限制.md)。Windows 0.4.1 预编译 ZIP 包含 MCP、Skill 和生产依赖；需本机 Node.js 24.x，Git 用于可选的改动比较，无需重新 npm 安装或构建。历史 0.1.0 ZIP 不含 Agent 接入功能。
 
 ## 接入 Agent
 
-源码完成下方构建后，或在 0.4.0 预编译包根目录，生成接入包：
+源码完成下方构建后，或在 0.4.1 预编译包根目录，生成接入包：
 
 ```powershell
 node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeTrail接入包"
@@ -140,12 +140,13 @@ CLI 成功输出结果时退出码为 0，即使结果状态为 `partial`；调�
 npm run check
 npm run test:browser
 npm run validate:monorepo
+npm run validate:external
 npm run benchmark
 npm run release
 npm run verify:release
 ```
 
-`npm run check` 编译前后端、运行 94 项 Node 测试，并验证人工标注样例。`npm run test:browser` 使用已安装的 Google Chrome 运行 20 条流程，覆盖架构、阅读、AI/Git、三个代表项目、100 节点交互、布局超时/失败与源码重试；执行前先完成构建。`npm run validate:monorepo` 用本项目验证真实跨包调用与源码证据。也可分别执行 `npm test`、`npm run validate:fixtures`、`npm run validate:acceptance`。
+`npm run check` 编译前后端、运行 101 项 Node 测试，并验证人工标注样例。`npm run test:browser` 使用已安装的 Google Chrome 运行 20 条流程，覆盖架构、阅读、AI/Git、三个代表项目、100 节点交互、布局超时/失败与源码重试；执行前先完成构建。`npm run validate:monorepo` 用本项目验证真实跨包调用与源码证据。也可分别执行 `npm test`、`npm run validate:fixtures`、`npm run validate:acceptance`。
 
 `npm run benchmark` 在新进程中重复测量三个样例、100/500 文件合成项目和工具自身，另测 Git 双图比较；不执行目标代码，不清空操作系统文件缓存。原始样本、硬件、输入快照和预算结论保存到 `artifacts/phase-five/performance.json`。既有基准（本次解析器变更前）中，本机 500 文件/12,977 行的三次首次解析约 1.97–2.09 秒，缓存搜索/两跳查询 p95 约 16 毫秒；完整 Git 比较约 19.6–25.2 秒，不能把这些数值当作新版或所有 500 文件项目的保证。0.4.0 自分析的时间成本见 [monorepo 验证记录](docs/monorepo解析验证记录.md)。
 
@@ -160,6 +161,7 @@ AI 自动测试使用环回地址上的模拟 Responses 服务和虚拟密钥，
 - `phase-one-validation.json`：逐类关系的 TP、FP、FN、样例诊断与分析耗时。
 - `reference-lab.json`：正常项目的完整关系快照。
 - `monorepo/`：`npm run validate:monorepo` 的本项目跨包关系与源码证据自验；可带冻结源码和旧版快照参数进行同语料对照，见 [验证记录](docs/monorepo解析验证记录.md)。
+- `external-monorepo/`：固定 TanStack Store 提交的六类 MCP 工具、pnpm 元数据失效、受控改动与分版本源码核对；运行前准备专用克隆，见 [外部验收记录](docs/外部monorepo验收记录.md)。
 - `degraded-lab.json`：语法错误、缺失模块及被排除文件的降级快照。
 - `phase-two/`：桌面、平板、手机工作台截图；浏览器失败诊断另存 `browser-test-results/`。
 - `phase-three/`：推荐、顺序、清单、AI 结果/回退及三种宽度的截图；`design-check/report.json` 为九个页面状态的设计检查。
@@ -218,6 +220,7 @@ docs/                      MVP 方案与阶段记录
 - 所选根目录之外的配置继承和依赖声明不读取，缺失内容会返回诊断。分析子项目时，不会隐式扩大到父目录或整个仓库。
 - 在根目录内最多读取 64 个项目配置，各项目使用自己的编译选项，兼容的上下文复用。工作区包的 exports/子路径由 TypeScript 解析，唯一的 rootDir/outDir/declarationDir 输出映射可回到已扫描源码；不安装依赖、不执行构建。跨程序符号按源码位置合并，不按同名猜测。边界与自验见 [monorepo 验证记录](docs/monorepo解析验证记录.md)。
 - 同目录多配置需要能按文件归属唯一选择；重名工作区包、输出路径冲突、跨根引用会保留诊断。普通静态调用不代表运行时必然执行，虚方法解析也不能替代运行时分发分析。
+- 只读识别根 `pnpm-workspace.yaml` 的包选择，配置参与快照失效和 Git 基线；不执行其构建或安装设置。真实 TanStack Store 的六类工具与改动分析见 [外部验收记录](docs/外部monorepo验收记录.md)。
 - CommonJS、动态 import 的模块关系、复杂解构绑定、构造器的独立调用节点、ECMAScript 私有方法和完整数据流不在本阶段支持范围。
 - 匿名回调有独立的词法所有者；只把回调作为参数传入时，记录规则候选，不创建外层函数到回调的直接调用边。
 - `traceDependents` 保留为单快照反向遍历；Git 比较由 `compareSnapshots` 及独立的分版本遍历完成。所有结果均表示静态潜在关联。

@@ -18,14 +18,18 @@ export const sha = (value: string | Buffer): string => createHash("sha256").upda
 export const isSourcePath = (value: string): boolean => /\.[jt]sx?$/i.test(value);
 
 /** No shell, optional locks, executable filters, prompts, replace refs or lazy network fetching. */
-function git(directory: string, args: string[], signal?: AbortSignal, maxBuffer = 8 * 1024 * 1024): Promise<Buffer> {
+function git(directory: string, args: string[], signal?: AbortSignal, maxBuffer = 8 * 1024 * 1024, input?: string): Promise<Buffer> {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith("GIT_")));
   Object.assign(env, { GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null" });
-  return new Promise((resolve, reject) => execFile("git", ["--no-optional-locks", "--literal-pathspecs", "-c", "core.fsmonitor=false", "-c", "core.quotePath=false", "-c", "diff.external=", "-c", "core.hooksPath=", "-C", directory, ...args],
+  return new Promise((resolve, reject) => {
+    const child = execFile("git", ["--no-optional-locks", "--literal-pathspecs", "-c", "core.fsmonitor=false", "-c", "core.quotePath=false", "-c", "diff.external=", "-c", "core.hooksPath=", "-C", directory, ...args],
     { encoding: "buffer", windowsHide: true, timeout: 15_000, maxBuffer, env, ...(signal ? { signal } : {}) }, (error, stdout, stderr) => {
       if (error) reject(Object.assign(new Error("Git 只读操作未能完成。"), { code: error.code, notRepository: stderr.toString("utf8").includes("not a git repository") }));
       else resolve(stdout);
-    }));
+    });
+    child.stdin?.on("error", () => { /* Process errors are reported by execFile's callback. */ });
+    child.stdin?.end(input);
+  });
 }
 
 export async function inspectGit(rootDir: string, detailed = false, signal?: AbortSignal): Promise<GitInspection> {
@@ -80,29 +84,46 @@ function allowedHistoricalPath(name: string): boolean {
   if (path.isAbsolute(name) || name.includes("\\") || parts.some((part) => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part)
     || /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)
     || [".git", "node_modules", "dist", "build", "coverage", ".next", ".npm-cache", ".codetrail"].includes(part.toLowerCase()) || /^\.env(?:\.|$)/i.test(part))) return false;
-  return isSourcePath(name) || name.endsWith(".json") || [".gitignore", ".codetrailignore"].includes(parts.at(-1)!);
+  return isSourcePath(name) || name.endsWith(".json") || name === "pnpm-workspace.yaml" || [".gitignore", ".codetrailignore"].includes(parts.at(-1)!);
 }
 
 /** Write only plain blobs into a new, tool-owned directory; never check out or run target code. */
 export async function materializeBaseline(info: GitInspection, destination: string, signal?: AbortSignal): Promise<string[]> {
   const warnings: string[] = [];
   let count = 0, bytes = 0, skipped = 0;
-  const paths = new Set<string>();
+  const paths = new Set<string>(), selected: { entry: GitTreeEntry; target: string }[] = [];
   for (const entry of info.entries) {
     if (signal?.aborted) throw new Error("取消基线读取");
     if (!allowedHistoricalPath(entry.path)) continue;
-    if (!["100644", "100755"].includes(entry.mode) || !Number.isFinite(entry.bytes) || entry.bytes > 1024 * 1024 || count >= 2000 || bytes + entry.bytes > 64 * 1024 * 1024) { skipped++; continue; }
+    if (!["100644", "100755"].includes(entry.mode) || !Number.isSafeInteger(entry.bytes) || entry.bytes < 0 || entry.bytes > 1024 * 1024 || count >= 2000 || bytes + entry.bytes > 64 * 1024 * 1024) { skipped++; continue; }
     const target = path.resolve(destination, ...entry.path.split("/"));
     const canonical = process.platform === "win32" ? target.toLowerCase() : target;
     if (!within(destination, target) || paths.has(canonical)) { skipped++; continue; }
-    const blob = await git(info.repository, ["cat-file", "blob", entry.oid], signal, 1024 * 1024 + 1024);
+    if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(entry.oid)) throw new Error("Invalid Git object identity");
+    selected.push({ entry, target }); paths.add(canonical); count++; bytes += entry.bytes;
+  }
+  // One bounded object-reader process instead of a Windows process per source/config blob.
+  const batch = selected.length ? await git(info.repository, ["cat-file", "--batch"], signal, 64 * 1024 * 1024 + 2000 * 256,
+    selected.map(({ entry }) => entry.oid).join("\n") + "\n") : Buffer.alloc(0);
+  let offset = 0;
+  for (const { entry, target } of selected) {
+    if (signal?.aborted) throw new Error("取消基线读取");
+    const end = batch.indexOf(10, offset);
+    if (end < offset || end - offset > 128) throw new Error("Invalid Git batch header");
+    const header = batch.subarray(offset, end).toString("ascii");
+    if (header !== `${entry.oid} blob ${entry.bytes}`) throw new Error("Unexpected Git batch object");
+    offset = end + 1;
+    const blob = batch.subarray(offset, offset + entry.bytes);
+    offset += entry.bytes;
+    if (batch[offset++] !== 10) throw new Error("Incomplete Git batch object");
     if (blob.length !== entry.bytes || blob.includes(0)) { skipped++; continue; }
     try { new TextDecoder("utf-8", { fatal: true }).decode(blob); } catch { skipped++; continue; }
     mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, blob, { flag: "wx" }); paths.add(canonical); count++; bytes += blob.length;
+    writeFileSync(target, blob, { flag: "wx" });
   }
+  if (offset !== batch.length) throw new Error("Unexpected Git batch output");
   if (skipped) warnings.push(`HEAD 有 ${skipped} 个候选路径因文件类型、大小、编码或读取预算未物化，历史分析可能存在缺口。`);
-  warnings.push("HEAD 基线只读取已提交的源码与 JSON/忽略配置，不复用工作区未提交的依赖声明；两侧解析环境可能不同。");
+  warnings.push("HEAD 基线只读取已提交的源码与 JSON、根 pnpm-workspace.yaml 和忽略配置，不复用工作区未提交的依赖声明；两侧解析环境可能不同。");
   return warnings;
 }
 

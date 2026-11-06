@@ -6,7 +6,7 @@ const SHARED = /(?:^|\/)(?:utils?|helpers?|shared|common|foundation)(?:\/|\.)/i;
 const ENTRY_FILE = /(?:^|\/)(?:main|entry|app)\.[jt]sx?$|^(?:src\/)?index\.[jt]sx?$/i;
 const ENTRY_NAME = /^(?:main|start|bootstrap|App)$/;
 const CALLABLE = new Set(["function", "method", "class"]);
-export const READING_ALGORITHM_VERSION = "structural-reading-1";
+export const READING_ALGORITHM_VERSION = "structural-reading-2";
 
 /** Explicit structural signals; no model scores, test coverage claims or business importance labels. */
 export function recommendReading(snapshot: AnalysisSnapshot, model = new ProjectExplorer(snapshot)): ReadingGuide {
@@ -34,7 +34,7 @@ export function recommendReading(snapshot: AnalysisSnapshot, model = new Project
     if (modules.size) reasons.push({ code: "cross-module", text: `与 ${modules.size} 个其他目录模块存在静态关联`, origin: "static", evidenceIds: [...new Set([...ins, ...outs].filter((edge) => model.nodes.get(edge.from === node.id ? edge.to : edge.from)?.moduleId !== node.moduleId).map((edge) => edge.evidenceId))].slice(0, 6) });
     if (symbol.exported && proof) reasons.push({ code: "public-export", text: "编译器将其识别为导出符号，可作为公共接口阅读入口", origin: "static", evidenceIds: [proof] });
     const topLevel = symbol.parentId === symbol.fileId;
-    const entry = topLevel && CALLABLE.has(node.kind) && !SHARED.test(node.path)
+    const entry = topLevel && CALLABLE.has(node.kind) && !node.name.startsWith("<anonymous@") && !SHARED.test(node.path)
       && (ENTRY_FILE.test(node.path) || ENTRY_NAME.test(node.name) && ins.length === 0);
     const rank = files.size * 5 + modules.size * 3 + new Set(outs.map((edge) => edge.to)).size + (symbol.exported ? 2 : 0);
     return { node, reasons, metrics: { referencingFiles: files.size, connectedModules: modules.size, directCallees: new Set(outs.map((edge) => edge.to)).size, exported: symbol.exported }, entry, entryRank: (ENTRY_NAME.test(node.name) ? 30 : 0) + (/(?:main|entry)\.[jt]sx?$/i.test(node.path) ? 10 : 0) + rank, rank, proof };

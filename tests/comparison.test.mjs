@@ -187,6 +187,28 @@ test("Git metadata inspection never invokes clean filters, textconv, external di
   assert.equal(existsSync(path.join(fixture.root, "executed-marker")), false);
 });
 
+test("batch baseline capture preserves Unicode, CRLF, empty and repeated blobs; rejects binary/encoding gaps without losing framing", async (t) => {
+  const text = '\uFEFFexport const text = `中文\r\n' + '0'.repeat(40) + ' blob 0\n`;\r\n';
+  const contents = Object.fromEntries(Array.from({ length: 220 }, (_, i) => [`src/f${i}.ts`, `export const value = ${i};\n`]));
+  Object.assign(contents, { 'src/中文 space.ts': text, 'src/copy.ts': text, 'src/empty.ts': '',
+    'src/binary.ts': Buffer.from([0, 10, 255]), 'src/invalid.ts': Buffer.from([255, 254]),
+    'pnpm-workspace.yaml': "packages: ['packages/*']\n", 'pnpm-lock.yaml': 'lockfileVersion: 9\n', '.env': 'SECRET=private' });
+  const project = tempProject(t, contents), destination = tempProject(t);
+  gitCommand(project.root, ['init', '--quiet']); gitCommand(project.root, ['add', '--all']); gitCommand(project.root, ['commit', '--quiet', '-m', 'Batch source corpus']);
+  const info = await inspectGit(project.root, true), before = gitCommand(project.root, ['status', '--porcelain=v1', '-z']);
+  const warnings = await materializeBaseline(info, destination.root);
+  for (const [name, content] of Object.entries(contents)) {
+    const file = path.join(destination.root, name);
+    if (Buffer.isBuffer(content) || name === '.env' || name === 'pnpm-lock.yaml') assert.equal(existsSync(file), false, name);
+    else assert.equal(readFileSync(file, 'utf8'), content, name);
+  }
+  assert.ok(warnings.some(x => x.includes('2 个候选路径')));
+  assert.equal(gitCommand(project.root, ['status', '--porcelain=v1', '-z']), before);
+  const cancelled = tempProject(t), controller = new AbortController(); controller.abort();
+  await assert.rejects(materializeBaseline(info, cancelled.root, controller.signal));
+  assert.equal(readdirSync(cancelled.root).length, 0);
+});
+
 test("cycles, duplicate call/reference pairs and third-hop dependents stay bounded, and callbacks never become proven call steps", (t) => {
   const project = tempProject(t, { "index.ts": "export function leaf() { return 1; }\nexport function a(): number { return leaf() + b(); }\nexport function b(): number { return a(); }\nexport function c() { return b(); }\nfunction register(callback: () => number) {}\nexport function setup() { register(leaf); }\n" });
   const capture = () => { let sources; const snapshot = analyzeProject({ rootDir: project.root }, { onSources: (value) => { sources = value; } }); return { snapshot, sources }; };

@@ -186,3 +186,68 @@ test('Windows reference path casing does not create duplicate projects or perman
   assert.equal(isSnapshotStale(snapshot), false);
   assert.ok(hasEdge(snapshot, 'CALLS', 'apps/a/src/main.ts', 'run', 'packages/core/src/value.ts', 'value'));
 });
+
+const pnpmFiles = {
+  'package.json': json({ private: true, workspaces: ['excluded/*'] }),
+  'pnpm-workspace.yaml': "# package selection, unrelated settings stay data\npackages: ['packages/**', '!packages/excluded']\nallowBuilds: { untrusted: true }\n",
+  'packages/core/package.json': json({ name: '@demo/core', exports: { '.': { development: './src/index.ts', default: './dist/index.js' }, './feature/*': { development: './src/*.ts', default: './dist/*.js' } } }),
+  'packages/core/src/index.ts': 'export function value() { return 1; }',
+  'packages/core/src/extra.ts': 'export function extra() { return 2; }',
+  'packages/app/package.json': json({ name: '@demo/app' }),
+  'packages/app/tsconfig.json': json({ compilerOptions: { module: 'ESNext', moduleResolution: 'Bundler', customConditions: ['development'] } }),
+  'packages/app/src/index.ts': "import { value } from '@demo/core'; import { extra } from '@demo/core/feature/extra'; export function run() { return value() + extra(); }",
+  'packages/excluded/package.json': json({ name: '@demo/core', exports: './src/index.ts' }),
+  'packages/excluded/src/index.ts': 'export function value() { return 999; }',
+};
+
+test('pnpm workspace selection takes precedence over npm metadata, without executing settings or guessing build layouts', (t) => {
+  const project = tempProject(t, pnpmFiles), snapshot = project.analyze();
+  assert.equal(snapshot.status, 'complete', JSON.stringify(snapshot.diagnostics));
+  assert.ok(hasEdge(snapshot, 'CALLS', 'packages/app/src/index.ts', 'run', 'packages/core/src/index.ts', 'value'));
+  assert.ok(hasEdge(snapshot, 'CALLS', 'packages/app/src/index.ts', 'run', 'packages/core/src/extra.ts', 'extra'));
+  assert.ok(!hasEdge(snapshot, 'CALLS', 'packages/app/src/index.ts', 'run', 'packages/excluded/src/index.ts', 'value'));
+  assert.ok(snapshot.configuration.inputs.some(x => x.path === 'pnpm-workspace.yaml'));
+  assert.equal(isSnapshotStale(snapshot), false);
+  project.write('pnpm-workspace.yaml', 'packages: []\n');
+  assert.equal(isSnapshotStale(snapshot), true);
+  assert.ok(!hasEdge(project.analyze(), 'CALLS', 'packages/app/src/index.ts', 'run', 'packages/core/src/index.ts', 'value'));
+});
+
+test('creating pnpm workspace metadata invalidates a snapshot even when no source changed', (t) => {
+  const { 'pnpm-workspace.yaml': workspace, ...withoutWorkspace } = pnpmFiles;
+  const project = tempProject(t, withoutWorkspace), first = project.analyze();
+  assert.equal(isSnapshotStale(first), false);
+  project.write('pnpm-workspace.yaml', workspace);
+  assert.equal(isSnapshotStale(first), true);
+  assert.notEqual(first.id, project.analyze().id);
+});
+
+test('invalid or aliased pnpm package selectors do not fall back to npm declarations', (t) => {
+  for (const text of ['packages: [packages/**\n', 'packages: [!!str 1, 3]\n', 'patterns: &p [packages/**]\npackages: *p\n', 'packages: [../*]\n', 'packages: [packages/**]\npackages: []\n']) {
+    const project = tempProject(t, { ...pnpmFiles, 'package.json': json({ workspaces: ['packages/core', 'packages/app'] }), 'pnpm-workspace.yaml': text });
+    const snapshot = project.analyze();
+    assert.ok(snapshot.diagnostics.some(x => x.code === 'WORKSPACE_CONFIG_INVALID'));
+    assert.ok(!hasEdge(snapshot, 'CALLS', 'packages/app/src/index.ts', 'run', 'packages/core/src/index.ts', 'value'));
+  }
+});
+
+test('pnpm glob normalization and negative patterns preserve the selected root and ignore boundary', (t) => {
+  const project = tempProject(t, { ...pnpmFiles, 'pnpm-workspace.yaml': "packages:\n - './packages//**'\n - '!./packages/excluded'\n", '.codetrailignore': 'packages/core/src/extra.ts\n' });
+  const snapshot = project.analyze();
+  assert.ok(hasEdge(snapshot, 'CALLS', 'packages/app/src/index.ts', 'run', 'packages/core/src/index.ts', 'value'));
+  assert.ok(!snapshot.files.some(x => x.path.endsWith('extra.ts')));
+  assert.ok(snapshot.unresolved.some(x => x.kind === 'IMPORTS'));
+});
+
+test('cached missing dependency probes invalidate when declarations are installed, without indexing implementations', (t) => {
+  const project = tempProject(t, { 'index.ts': "import { value } from 'missing-dependency'; export function run() { return value(); }" });
+  const before = project.analyze(); assert.equal(isSnapshotStale(before), false);
+  assert.ok(before.diagnostics.some(x => x.code === 'TS2307'));
+  project.write('node_modules/missing-dependency/package.json', json({ name: 'missing-dependency', types: './index.d.ts' }));
+  project.write('node_modules/missing-dependency/index.d.ts', 'export declare function value(): number;');
+  assert.equal(isSnapshotStale(before), true);
+  const after = project.analyze(); assert.equal(isSnapshotStale(after), false);
+  assert.ok(!after.diagnostics.some(x => x.code === 'TS2307'));
+  assert.equal(after.files.length, 1);
+  assert.ok(after.unresolved.some(x => x.kind === 'CALLS' && x.reason === 'external'));
+});
