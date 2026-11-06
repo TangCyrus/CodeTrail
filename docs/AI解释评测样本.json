@@ -1,0 +1,15 @@
+{
+  "status": "prepared-not-run",
+  "scope": "Expected facts for authored examples; no real model outputs have been evaluated.",
+  "samples": [
+    { "id": "react-order", "project": "react-checkout", "node": "createOrder", "action": "explain", "sources": ["src/domain/orders.ts", "src/domain/pricing.ts"], "expectedFacts": ["计算订单项总额后应用折扣", "返回 amount 和 lines"], "unsupportedClaims": ["已持久化订单", "已发送网络请求"] },
+    { "id": "react-component", "project": "react-checkout", "node": "App", "action": "neighbors", "sources": ["src/App.tsx", "src/components/CheckoutForm.tsx"], "expectedFacts": ["静态使用 CheckoutForm", "handleCheckout 作为属性传递"], "unsupportedClaims": ["用户一定会点击按钮", "回调在组件创建时已经执行"] },
+    { "id": "react-discount", "project": "react-checkout", "node": "applyDiscount", "action": "explain", "sources": ["src/domain/pricing.ts"], "expectedFacts": ["total 大于 discount 时返回差值，否则返回 0"], "unsupportedClaims": ["已经验证 discount 非负", "折扣规则来自数据库"] },
+    { "id": "inventory-reserve", "project": "ts-inventory", "node": "reserve", "action": "explain", "sources": ["src/inventory.ts"], "expectedFacts": ["数量小于 1 或库存不足时抛错", "返回 remaining 计算值", "片段没有写回 product.available"], "unsupportedClaims": ["已经原子扣减库存", "已经获取数据库锁"] },
+    { "id": "inventory-checkout", "project": "ts-inventory", "node": "checkout", "action": "neighbors", "sources": ["src/checkout.ts", "src/inventory.ts"], "expectedFacts": ["调用 reserve 并直接返回结果"], "unsupportedClaims": ["库存一定与真实仓库一致", "测试关联等于覆盖率"] },
+    { "id": "git-alias", "project": "git-alias", "stage": "baseline-template", "node": "submit", "action": "neighbors", "sources": ["src/order.ts", "src/pricing/amount.ts"], "expectedFacts": ["通过 tsconfig 别名导入并调用 amount"], "unsupportedClaims": ["跨进程调用", "已经支付成功"] },
+    { "id": "structure-importance", "project": "ts-inventory", "node": "checkout", "action": "importance", "sources": ["src/checkout.ts", "src/main.ts", "tests/checkout.test.ts"], "expectedFacts": ["结构线索可由静态引用位置核实", "业务重要性仍需确认"], "unsupportedClaims": ["肯定是最重要业务函数", "推荐分数等于业务风险"] },
+    { "id": "react-entry", "project": "react-checkout", "node": "Preview", "action": "explain", "sources": ["src/main.tsx"], "expectedFacts": ["返回 App 的 JSX 使用", "当前片段没有实际挂载宿主根节点"], "unsupportedClaims": ["已经证明 React 生命周期执行顺序", "确定完成浏览器渲染"] }
+  ],
+  "manualRatingFields": ["model", "contextHash", "generatedAt", "latencyMs", "usage", "statement", "citationValid", "semanticallySupported", "hypothesisMarked", "uncertaintyAdequate", "notes"]
+}

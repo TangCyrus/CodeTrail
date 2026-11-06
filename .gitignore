@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.npm-cache/
+artifacts/
+coverage/
+.taste-skill/
+test-results/
+playwright-report/
+.impeccable/
+.env
+.env.*
+!.env.example

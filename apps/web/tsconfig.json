@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2023", "module": "ESNext", "moduleResolution": "Bundler", "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["vite/client"],
+    "noEmit": true, "declaration": true, "declarationMap": false
+  },
+  "references": [{ "path": "../../packages/shared" }],
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

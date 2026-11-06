@@ -1,0 +1,6 @@
+# Deliberately malformed validation projects are not part of the tool's own source graph.
+fixtures/
+test-results/
+playwright-report/
+.taste-skill/
+.impeccable/

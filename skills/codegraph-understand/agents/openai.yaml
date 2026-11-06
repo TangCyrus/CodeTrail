@@ -1,0 +1,9 @@
+interface:
+  display_name: "CodeGraph 理解项目"
+  short_description: "Understand architecture with source-backed CodeGraph tools"
+  default_prompt: "Use $codegraph-understand to explain this project's architecture and recommend where to start reading, with source evidence."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "codegraph"
+      description: "Local CodeGraph structural analysis and source evidence"

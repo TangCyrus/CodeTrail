@@ -1,0 +1,18 @@
+{
+  "name": "@codegraph/local",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "codegraph": "./dist/cli.js"
+  },
+  "dependencies": {
+    "@codegraph/analyzer": "0.2.0",
+    "@codegraph/graph": "0.2.0",
+    "@codegraph/shared": "0.2.0",
+    "@fastify/static": "10.1.10",
+    "@modelcontextprotocol/server": "2.4.0",
+    "fastify": "5.12.8",
+    "zod": "4.6.7"
+  }
+}

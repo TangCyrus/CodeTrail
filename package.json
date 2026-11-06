@@ -1,0 +1,46 @@
+{
+  "name": "codegraph",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Source-backed code context and change impact for coding agents",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=11"
+  },
+  "packageManager": "npm@11.19.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b && vite build --config apps/web/vite.config.ts",
+    "build:server": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "analyze": "node apps/local/dist/cli.js analyze",
+    "open": "node apps/local/dist/cli.js open",
+    "mcp": "node apps/local/dist/cli.js mcp",
+    "test:mcp": "npm run build:server && node --test tests/mcp.test.mjs",
+    "validate:codex": "npm run build:server && node scripts/verify-codex.mjs",
+    "setup:codex": "node scripts/setup-codex.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "validate:fixtures": "npm run build && node scripts/validate-fixtures.mjs",
+    "check": "npm run test && npm run validate:fixtures",
+    "test:browser": "playwright test --config playwright.config.mjs",
+    "demo:git": "node scripts/prepare-demo.mjs",
+    "validate:acceptance": "npm run build && node --test tests/acceptance.test.mjs tests/reliability.test.mjs",
+    "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "release": "npm run build && node scripts/package-mvp.mjs",
+    "verify:release": "node scripts/verify-release.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.10.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.6"
+  }
+}
