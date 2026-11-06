@@ -5,13 +5,20 @@ import ts from "typescript";
 import { assertSnapshotIntegrity, type AnalysisSnapshot, type AnalyzerAdapter, type AnalyzeRequest, type AnalysisPhase, type CapturedSource, type EvidenceRecord, type RelationKind, type RelationRecord, type SourceFileRecord, type SymbolKind, type SymbolRecord, type UnresolvedRecord } from "@codetrail/shared";
 import { createCompiler, rangeOf } from "./compiler.js";
 import { hash, scanProject, slash, within } from "./scan.js";
+import { destructuredFactoryValue } from "./value-origins.js";
+import { summarizeResolution } from "@codetrail/shared";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }
 
 function declarationKind(node: ts.Node): SymbolKind | undefined {
+  if (ts.isBindingElement(node)) {
+    let parent: ts.Node = node.parent;
+    while (ts.isObjectBindingPattern(parent) || ts.isArrayBindingPattern(parent) || ts.isBindingElement(parent)) parent = parent.parent;
+    return ts.isParameter(parent) ? "parameter" : "variable";
+  }
   if (ts.isFunctionDeclaration(node)) return "function";
   if (ts.isMethodDeclaration(node) || ts.isMethodSignature(node) || ts.isGetAccessor(node) || ts.isSetAccessor(node)) return "method";
   if (ts.isClassDeclaration(node)) return "class";
@@ -127,11 +134,12 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       if (!evidence.has(id)) evidence.set(id, { id, fileId: file.id, fileHash: file.hash, range: rangeOf(source, start, end), excerpt: source.text.slice(start, end), extractor: `typescript@${ts.version}` });
       return id;
     }
-    function addEdge(kind: RelationKind, from: string, to: string, node: ts.Node, usage?: RelationRecord["usage"]): void {
+    function addEdge(kind: RelationKind, from: string, to: string, node: ts.Node, usage?: RelationRecord["usage"], via?: ts.Node[]): void {
       const evidenceId = makeEvidence(node);
       const id = shortId("edge", `${kind}:${from}:${to}:${evidenceId}:${usage ?? ""}`);
       const entry: RelationRecord = { id, from, to, kind, evidenceId, origin: kind === "REGISTERS_CALLBACK" ? "rule" : "static", resolution: kind === "REGISTERS_CALLBACK" ? "callback-argument-rule" : kind === "CONTAINS" ? "syntax" : "compiler-symbol" };
       if (usage) entry.usage = usage;
+      if (via?.length) { entry.resolution = "value-origin"; entry.supportingEvidenceIds = [...new Set(via.map(makeEvidence))]; }
       relations.set(id, entry);
     }
     function addUnresolved(kind: UnresolvedRecord["kind"], from: string, node: ts.Node, reason: UnresolvedRecord["reason"], candidateIds: string[] = []): void {
@@ -227,6 +235,22 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       ts.forEachChild(node, (child) => collect(child, nextParent, nextScope));
     }
     for (const source of sourceFiles) { activate(source); collect(source, fileByAbsolute.get(path.resolve(source.fileName))!.id, ""); }
+    const written = new Set<string>();
+    for (const source of sourceFiles) {
+      activate(source);
+      function mark(node: ts.Node): void {
+        if (ts.isIdentifier(node)) for (const declaration of canonical(checker.getSymbolAtLocation(node))?.declarations ?? []) written.add(declarationKey(declaration));
+        ts.forEachChild(node, mark);
+      }
+      function writes(node: ts.Node): void {
+        if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) mark(node.left);
+        if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node))
+          && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)) mark(node.operand);
+        if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && !ts.isVariableDeclarationList(node.initializer)) mark(node.initializer);
+        ts.forEachChild(node, writes);
+      }
+      writes(source);
+    }
     for (const entry of registered) {
       const key = declarationKey(entry.node);
       byDeclaration.set(key, [...(byDeclaration.get(key) ?? []), entry]);
@@ -296,7 +320,13 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       const from = ownerOf(node);
       const expression = unwrap(node.expression);
       const symbol = symbolAt(expression);
-      const candidates = byNode.has(expression) ? [byNode.get(expression)!] : targets(symbol);
+      let candidates = byNode.has(expression) ? [byNode.get(expression)!] : targets(symbol);
+      const origin = destructuredFactoryValue(symbol, checker, written, declarationKey);
+      if (origin && origin.via.every(part => fileByAbsolute.has(path.resolve(part.getSourceFile().fileName)))) {
+        const traced = byNode.get(origin.expression) ?? byDeclaration.get(declarationKey(origin.expression))?.[0];
+        const values = traced ? [traced] : targets(symbolAt(origin.expression));
+        if (values.length === 1 && values[0]!.callable) candidates = values;
+      }
       const type = checker.getTypeAtLocation(expression);
       const dynamic = !!(type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter))
         || candidates.some((candidate) => candidate.record.kind === "parameter");
@@ -304,7 +334,7 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
         addUnresolved("CALLS", from, node.expression, "unsupported");
       } else if (dynamic) addUnresolved("CALLS", from, node.expression, "dynamic", candidates.map((entry) => entry.record.id));
       else if (candidates.length > 1) addUnresolved("CALLS", from, node.expression, "ambiguous", candidates.map((entry) => entry.record.id));
-      else if (candidates[0]?.callable) addEdge("CALLS", from, candidates[0].record.id, node.expression);
+      else if (candidates[0]?.callable) addEdge("CALLS", from, candidates[0].record.id, node.expression, undefined, origin?.via);
       else addUnresolved("CALLS", from, node.expression, candidates.length ? "dynamic" : missingReason(symbol), candidates.map((entry) => entry.record.id));
       for (const argument of node.arguments) {
         const unwrapped = unwrap(argument);
@@ -363,12 +393,13 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       configuration: { ...compiler.configuration, inputs: compiler.configInputs.map((input) => ({ path: slash(path.relative(scan.root, input.path)), hash: input.hash })), missingInputs: compiler.missingInputs.map((file) => slash(path.relative(scan.root, file))) },
       scope: { maxFiles: request.maxFiles ?? 500, maxFileBytes: request.maxFileBytes ?? 1024 * 1024 },
       files, symbols: symbolRecords,
-      relations: relationRecords, evidence: [...evidence.values()], unresolved: unresolvedRecords,
+      relations: relationRecords, evidence: [...evidence.values()], unresolved: unresolvedRecords, resolutionSummary: summarizeResolution(unresolvedRecords),
       diagnostics, skipped: scan.skipped,
       statistics: { files: files.length, symbols: symbolRecords.length, relations: relationRecords.length, unresolved: unresolvedRecords.length, parseErrors: files.filter((file) => file.parseStatus === "error").length, durationMs: Math.round((performance.now() - started) * 100) / 100 },
       limitations: [
         "Static symbol relations are not runtime execution traces or complete data flow.",
         "Callback arguments are rule candidates, not proven callback execution.",
+        "Value-origin calls require const object destructuring from a unique synchronous factory returning one literal object; defaults, rest, writes and alternative returns are not traced.",
         "Dynamic dispatch, callable parameters and CommonJS require have no proven direct call edge; anonymous callbacks have their own lexical owner.",
         "Scope is the scanned TS/JS allowlist; bounded in-root project references supply per-project options without expanding the source scope.",
         "Workspace output-to-source redirects require unique compiler output paths; ambiguous configurations and package identities remain explicit gaps.",

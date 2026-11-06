@@ -44,10 +44,15 @@ test("architecture overview uses live counts, graph nodes, local fonts and prese
   await page.reload();
   await expect(page.locator(".project-counts")).toContainText("14");
   await expect(page.locator(".graph-card")).toHaveCount(5);
+  await expect(page.locator(".graph-footer")).toContainText("处解析缺口");
+  await expect(page.locator(".graph-footer")).toContainText("处外部引用");
   await expect(page.locator(".source-code")).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "entry.ts", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.fonts.check('14px "IBM Plex Sans"'))).toBe(true);
   await page.screenshot({ path: path.join(artifacts, "overview-1440.png"), fullPage: true });
+  await page.locator(".graph-footer").getByRole("button", {name: /解析缺口/}).click();
+  await expect(page.locator(".diagnostics-panel")).toContainText(/解析缺口，另有.*外部引用/);
+  await page.getByRole("button", {name:"返回节点详情"}).click();
   const moduleNode = page.locator(".react-flow__node").filter({ has: page.getByText("domain", { exact: true }) });
   await moduleNode.focus();
   await moduleNode.press("Enter");

@@ -50,8 +50,10 @@ export interface RelationRecord {
   to: string;
   kind: RelationKind;
   origin: EvidenceOrigin;
-  resolution: "syntax" | "compiler-symbol" | "callback-argument-rule";
+  resolution: "syntax" | "compiler-symbol" | "callback-argument-rule" | "value-origin";
   evidenceId: string;
+  /** Additional captured source proving a bounded value-origin resolution. */
+  supportingEvidenceIds?: string[];
   /** IMPORTS and REFERENCES distinguish type-only uses from value uses. */
   usage?: "type" | "value" | "mixed";
 }
@@ -71,6 +73,19 @@ export interface AnalysisDiagnostic {
   message: string;
   path?: string;
   range?: SourceRange;
+}
+
+export interface ResolutionSummary {
+  /** Compatibility total: all sites without an indexed target, including external references. */
+  totalUnlinked: number;
+  external: number;
+  gaps: number;
+  byReason: Record<UnresolvedRecord["reason"], number>;
+}
+export function summarizeResolution(records: readonly UnresolvedRecord[]): ResolutionSummary {
+  const byReason: ResolutionSummary["byReason"] = { dynamic: 0, ambiguous: 0, external: 0, unresolved: 0, excluded: 0, unsupported: 0 };
+  for (const record of records) byReason[record.reason]++;
+  return { totalUnlinked: records.length, external: byReason.external, gaps: records.length - byReason.external, byReason };
 }
 
 export interface SkippedPath {
@@ -93,6 +108,8 @@ export interface AnalysisSnapshot {
   relations: RelationRecord[];
   evidence: EvidenceRecord[];
   unresolved: UnresolvedRecord[];
+  /** Derived on demand for older persisted snapshots as well. */
+  resolutionSummary?: ResolutionSummary;
   diagnostics: AnalysisDiagnostic[];
   skipped: SkippedPath[];
   statistics: {
@@ -155,6 +172,7 @@ export function assertSnapshotIntegrity(snapshot: AnalysisSnapshot): void {
     }
     if (edge.kind === "REGISTERS_CALLBACK" && edge.origin !== "rule") throw new Error("Callback must be a rule candidate");
     if (edge.kind !== "REGISTERS_CALLBACK" && edge.origin !== "static") throw new Error("Parsed relation must be static");
+    if (edge.supportingEvidenceIds?.some(id => !evidence.has(id))) throw new Error(`Dangling supporting evidence: ${edge.id}`);
   }
   for (const item of snapshot.unresolved) {
     if (!nodes.has(item.from) || !evidence.has(item.evidenceId)
@@ -163,4 +181,5 @@ export function assertSnapshotIntegrity(snapshot: AnalysisSnapshot): void {
   if (snapshot.statistics.files !== files.size || snapshot.statistics.symbols !== symbols.size
     || snapshot.statistics.relations !== snapshot.relations.length
     || snapshot.statistics.unresolved !== snapshot.unresolved.length) throw new Error("Inconsistent snapshot statistics");
+  if (snapshot.resolutionSummary && JSON.stringify(snapshot.resolutionSummary) !== JSON.stringify(summarizeResolution(snapshot.unresolved))) throw new Error("Inconsistent resolution summary");
 }

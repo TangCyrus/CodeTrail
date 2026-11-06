@@ -1,4 +1,4 @@
-import type { AnalysisDiagnostic, AnalysisSnapshot, RelationKind, SourceFileRecord, SourceRange, SymbolKind } from "./index.js";
+import type { AnalysisDiagnostic, AnalysisSnapshot, RelationKind, ResolutionSummary, SourceFileRecord, SourceRange, SymbolKind } from "./index.js";
 
 export type AnalysisPhase = "queued" | "scanning" | "compiling" | "extracting" | "verifying" | "saving";
 export interface AnalysisJob {
@@ -31,6 +31,7 @@ export interface ExplorerEdge {
   origin: "static" | "rule";
   count: number;
   evidenceIds: string[];
+  supportingEvidenceIds?: string[];
   usage?: "type" | "value" | "mixed";
 }
 export interface Breadcrumb { id: string | null; label: string; kind: "overview" | "module" | "file" | "symbol" }
@@ -52,6 +53,7 @@ export interface ProjectOverview {
   status: AnalysisSnapshot["status"];
   stale: boolean;
   statistics: AnalysisSnapshot["statistics"];
+  resolutionSummary: ResolutionSummary;
   modules: ExplorerNode[];
   files: ExplorerNode[];
   diagnostics: AnalysisDiagnostic[];
@@ -68,6 +70,8 @@ export interface NodeDetail {
   outgoing: NodeConnection[];
   hiddenConnections: number;
   unresolved: { id: string; kind: string; reason: string; excerpt: string; evidenceId: string }[];
+  externalReferences: NodeDetail["unresolved"];
+  resolutionSummary: ResolutionSummary;
 }
 export interface SourceWindow {
   file: SourceFileRecord;

@@ -45,11 +45,15 @@ test("real stdio handshake exposes six read-only tools and a complete source-bac
   assert.equal(overview.project.rootDir, project.root);
   assert.equal(overview.statistics.files, 2);
   assert.equal(overview.stale, false);
+  assert.equal(overview.resolutionSummary.gaps + overview.resolutionSummary.external, overview.statistics.unresolved);
   const snapshotId = overview.snapshotId;
   const search = await call("search_symbols", { snapshotId, query: "price" });
   const symbol = search.results.find((item) => item.name === "price");
   assert.ok(symbol);
   const graph = await call("symbol_context", { snapshotId, nodeId: symbol.id });
+  assert.ok(graph.externalReferences.every(item => item.reason === "external"));
+  assert.ok(graph.unresolvedDetails.every(item => item.reason !== "external"));
+  assert.equal(graph.nodeResolutionSummary.gaps + graph.nodeResolutionSummary.external, graph.nodeResolutionSummary.totalUnlinked);
   const edge = graph.edges.find((item) => item.kind === "CALLS");
   assert.ok(edge);
   assert.equal(edge.origin, "static");

@@ -19,10 +19,11 @@ const git = (parameters) => execFileSync('git', ['--no-optional-locks', '-c', 'c
 assert.equal(git(['rev-parse', 'HEAD']).trim(), revision, 'Use the pinned TanStack Store revision');
 assert.ok(!/^(?:filter\.|include(?:if\..*)?\.)/im.test(git(['config', '--local', '--no-includes', '--list'])), 'Use a disposable clone without executable filters or included Git configuration');
 assert.equal(git(['status', '--porcelain=v1', '-z']), '', 'Acceptance requires a clean, disposable checkout');
-const targetPath = 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
+const core = args.includes('--core');
+const targetPath = core ? 'packages/store/src/alien.ts' : 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
 const workspaceFile = path.join(project, 'pnpm-workspace.yaml'), workspace = readFileSync(workspaceFile);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.5.0' });
+const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.6.0' });
 const calls = [], proofs = [];
 let overview, comparison, reading, snapshot, result;
 async function call(name, parameters) {
@@ -42,8 +43,9 @@ try {
   assert.equal(overview.project.rootDir, project); assert.equal(overview.stale, false);
   assert.equal(overview.statistics.files, 213); assert.equal(overview.statistics.parseErrors, 0);
   assert.equal(overview.totals.diagnostics > 0, true, 'Missing third-party dependencies must remain visible');
+  assert.equal(overview.resolutionSummary.gaps + overview.resolutionSummary.external, overview.statistics.unresolved);
   const pin = { snapshotId: overview.snapshotId };
-  for (const [query, file] of [['shallow', targetPath], ['createAtom', 'packages/store/src/atom.ts'], ['useCreateAtom', 'packages/react-store/src/useCreateAtom.ts']]) {
+  for (const [query, file] of [[core ? 'createReactiveSystem.link' : 'shallow', targetPath], ['createAtom', 'packages/store/src/atom.ts'], ['useCreateAtom', 'packages/react-store/src/useCreateAtom.ts']]) {
     const search = await call('search_symbols', { ...pin, query, limit: 20 });
     const symbol = search.results.find(x => x.name === query && x.path === file); assert.ok(symbol, `${file}#${query}`);
     const context = await call('symbol_context', { ...pin, nodeId: symbol.id, maxNodes: 12 });
@@ -60,8 +62,10 @@ try {
     assert.equal((await call('project_overview', {})).stale, true);
   } finally { writeFileSync(workspaceFile, workspace); }
   assert.equal((await call('project_overview', {})).stale, false);
-  assert.ok(original.toString('utf8').includes('if (Object.is(objA, objB)) {'));
-  writeFileSync(targetFile, original.toString('utf8').replace('if (Object.is(objA, objB)) {', 'if (objA === objB) {'));
+  const beforeText = core ? 'const prevDep = sub.depsTail' : 'if (Object.is(objA, objB)) {';
+  const afterText = core ? 'const prevDep = (sub.depsTail)' : 'if (objA === objB) {';
+  assert.ok(original.toString('utf8').includes(beforeText));
+  writeFileSync(targetFile, original.toString('utf8').replace(beforeText, afterText));
   comparison = await call('compare_worktree', { refresh: true, limit: 2 });
   assert.equal(comparison.baseline.state, 'ready'); assert.equal(comparison.baseline.head, revision);
   assert.equal(comparison.stale, false); assert.equal(comparison.totals.changes, 1); assert.ok(comparison.totals.paths > 0);
@@ -76,10 +80,17 @@ try {
   }
   assert.equal(new Set(routes.map(x => x.id)).size, comparison.totals.paths);
   for (const side of ['base', 'current']) {
-    const route = routes.find(x => x.side === side && x.seed.name === 'shallow'
-      && /^packages\/(react|preact)-store\/tests\//.test(x.target.path) && x.steps.some(step => step.kind === 'CALLS'));
+    const route = routes.find(x => x.side === side && x.seed.name === (core ? 'createReactiveSystem.link' : 'shallow')
+      && (core ? /^packages\/store\/src\/(atom|signal)\.ts$/.test(x.target.path) : /^packages\/(react|preact)-store\/tests\//.test(x.target.path)) && x.steps.some(step => step.kind === 'CALLS'));
     assert.ok(route, `Missing source-backed cross-package ${side} test caller`);
     for (const step of route.steps) {
+      if (core && step.kind === 'CALLS') assert.ok(step.supportingEvidenceIds?.length, 'Core recovered call must retain value-origin proofs');
+      for (const evidenceId of step.supportingEvidenceIds ?? []) {
+        const support = await call('read_evidence', {comparisonId: comparison.comparisonId, side, evidenceId, maxLines: 8});
+        assert.equal(support.snapshotId, comparison.snapshotIds[side]);
+        assert.equal(support.evidence.find(x => x.id === evidenceId)?.fileHash, support.fileHash);
+        proofs.push({side, role:'value-origin', snapshotId:support.snapshotId, filePath:support.filePath, fileHash:support.fileHash, evidenceId});
+      }
       const evidence = await call('read_evidence', { comparisonId: comparison.comparisonId, side, evidenceId: step.evidenceId, maxLines: 12 });
       assert.equal(evidence.snapshotId, comparison.snapshotIds[side]); assert.equal(evidence.filePath, step.from.path);
       assert.equal(evidence.fileHash, sha(readFileSync(path.join(project, step.from.path))));
@@ -88,11 +99,11 @@ try {
       assert.equal(text.slice(proof.range.startOffset, proof.range.endOffset), proof.excerpt);
       proofs.push({ side, snapshotId: evidence.snapshotId, filePath: evidence.filePath, fileHash: evidence.fileHash, range: proof.range, excerpt: proof.excerpt, kind: step.kind });
     }
-    const mapping = change.symbols.find(x => x.oldNode?.name === 'shallow' && x.newNode?.name === 'shallow'); assert.ok(mapping);
-    const source = await call('read_evidence', { comparisonId: comparison.comparisonId, side, nodeId: mapping[side === 'base' ? 'oldNode' : 'newNode'].id, maxLines: 8 });
+    const mapping = core ? {oldNode: routes.find(x => x.side === 'base' && x.seed.name === 'createReactiveSystem.link').seed, newNode: routes.find(x => x.side === 'current' && x.seed.name === 'createReactiveSystem.link').seed} : change.symbols.find(x => x.oldNode?.name === 'shallow' && x.newNode?.name === 'shallow'); assert.ok(mapping);
+    const source = await call('read_evidence', { comparisonId: comparison.comparisonId, side, nodeId: mapping[side === 'base' ? 'oldNode' : 'newNode'].id, maxLines: core ? 20 : 8 });
     assert.equal(source.snapshotId, comparison.snapshotIds[side]); assert.equal(source.fileHash, sha(side === 'base' ? original : readFileSync(targetFile)));
     assert.equal(source.matchesCurrentFile, side === 'current');
-    assert.ok(source.lines.some(x => x.text.includes(side === 'base' ? 'Object.is(objA, objB)' : 'objA === objB')));
+    assert.ok(source.lines.some(x => x.text.includes(side === 'base' ? beforeText : afterText)));
   }
   // Inspect the exact MCP-produced snapshot rather than running a separate analyzer for statistics.
   const store = new SnapshotStore(path.join(run, 'cache'), project);
@@ -121,7 +132,7 @@ try {
     fixedCorpus = { identicalFilesAndHashes: true, before: before.statistics, after: snapshot.statistics,
       diagnostics: { before: before.diagnostics.length, after: snapshot.diagnostics.length } };
   }
-  result = { passed: true, repository: 'https://github.com/TanStack/store', revision, run, project, modelCalls: 0,
+  result = { passed: true, repository: 'https://github.com/TanStack/store', revision, run, project, core, modelCalls: 0,
     snapshotId: overview.snapshotId, status: overview.status, statistics: overview.statistics, diagnostics: overview.totals.diagnostics,
     reading: reading.readingOrder.map(x => ({ name: x.node.name, path: x.node.path })),
     comparison: { id: comparison.comparisonId, snapshotIds: comparison.snapshotIds, status: comparison.status, statistics: comparison.statistics,

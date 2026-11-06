@@ -32,6 +32,7 @@ export interface ImpactStep {
   kind: RelationKind;
   usage: "type" | "value" | "mixed";
   evidenceId: string;
+  supportingEvidenceIds?: string[];
 }
 export interface ComparisonPath {
   id: string;
@@ -58,6 +59,7 @@ export interface ComparisonReport {
   maxPaths: number;
   truncated: boolean;
   statistics: { files: number; symbols: number; paths: number; testFiles: number; oldUnresolved: number; newUnresolved: number };
+  resolutionSummary?: { base: import("./index.js").ResolutionSummary | null; current: import("./index.js").ResolutionSummary };
   limitations: string[];
 }
 export interface ComparisonBundle {

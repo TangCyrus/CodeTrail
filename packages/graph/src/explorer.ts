@@ -1,4 +1,5 @@
 import type { AnalysisSnapshot, Breadcrumb, ExplorerEdge, ExplorerGraph, ExplorerNode, NodeConnection, NodeDetail, ProjectOverview, RelationRecord, SearchResults } from "@codetrail/shared";
+import { summarizeResolution } from "@codetrail/shared";
 
 export interface GraphOptions { focus?: string; maxNodes?: number; depth?: number; includeTypes?: boolean; includeReferences?: boolean; includeCandidates?: boolean }
 const basename = (value: string): string => value.split("/").at(-1) ?? value;
@@ -36,7 +37,7 @@ export class ProjectExplorer {
     const snapshot = this.snapshot;
     return {
       snapshotId: snapshot.id, name: basename(snapshot.rootDir.replaceAll("\\", "/")), rootDir: snapshot.rootDir,
-      createdAt: snapshot.createdAt, status: snapshot.status, stale, statistics: snapshot.statistics,
+      createdAt: snapshot.createdAt, status: snapshot.status, stale, statistics: snapshot.statistics, resolutionSummary: summarizeResolution(snapshot.unresolved),
       modules: this.modules, files: this.files, diagnostics: snapshot.diagnostics, skippedCount: snapshot.skipped.length, limitations: snapshot.limitations,
     };
   }
@@ -91,6 +92,7 @@ export class ProjectExplorer {
       }
       entry.count++;
       if (entry.evidenceIds.length < 20) entry.evidenceIds.push(edge.evidenceId);
+      if (edge.supportingEvidenceIds?.length) entry.supportingEvidenceIds = [...new Set([...(entry.supportingEvidenceIds ?? []), ...edge.supportingEvidenceIds])].slice(0, 20);
     }
     return [...grouped.values()];
   }
@@ -148,11 +150,13 @@ export class ProjectExplorer {
     const incoming = connections("incoming");
     const outgoing = connections("outgoing");
     const proofs = new Map(this.snapshot.evidence.map((proof) => [proof.id, proof]));
+    const unlinked = this.snapshot.unresolved.filter(item => item.from === id);
+    const details = (external: boolean): NodeDetail["unresolved"] => unlinked.filter(item => (item.reason === "external") === external).slice(0, 30).map(item => ({ id: item.id, kind: item.kind, reason: item.reason, excerpt: proofs.get(item.evidenceId)!.excerpt, evidenceId: item.evidenceId }));
     return {
       node, files: node.kind === "module" ? this.files.filter((file) => file.moduleId === id) : [],
       symbols: node.kind === "file" ? [...this.nodes.values()].filter((item) => item.fileId === id && item.id !== id && this.significant(item)) : [],
       incoming: incoming.slice(0, 40), outgoing: outgoing.slice(0, 40), hiddenConnections: Math.max(0, incoming.length - 40) + Math.max(0, outgoing.length - 40),
-      unresolved: this.snapshot.unresolved.filter((item) => item.from === id).slice(0, 30).map((item) => ({ id: item.id, kind: item.kind, reason: item.reason, excerpt: proofs.get(item.evidenceId)!.excerpt, evidenceId: item.evidenceId })),
+      unresolved: details(false), externalReferences: details(true), resolutionSummary: summarizeResolution(unlinked),
     };
   }
 }

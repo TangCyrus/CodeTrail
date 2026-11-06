@@ -13,6 +13,8 @@ test("CLI stdout is parseable JSON and progress summary stays on stderr", () => 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).schemaVersion, "0.1");
   assert.match(result.stderr, /14 files/);
+  const summary = JSON.parse(result.stdout).resolutionSummary;
+  assert.ok(result.stderr.includes(`${summary.gaps} gaps, ${summary.external} external references (${summary.totalUnlinked} unlinked total)`));
 });
 
 test("CLI publishes a snapshot atomically to a path with Chinese characters and spaces", (t) => {

@@ -1,0 +1,44 @@
+import { test, expect } from '@playwright/test';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import path from 'node:path';
+import { createLocalServer } from '../../apps/local/dist/server.js';
+
+test('external references, gaps and factory value proofs stay separately readable at three widths', async ({page}) => {
+  const parent = path.resolve('artifacts/core-relations/browser'); mkdirSync(parent, {recursive:true});
+  const project = mkdtempSync(path.join(parent, 'project-'));
+  writeFileSync(path.join(project,'index.ts'), `function system(){return {link}; function link(){return 1}}
+    const {link} = system();
+    export function run(fn: () => void){link(); fn(); JSON.stringify(1); missing()}`);
+  const server = await createLocalServer({rootDir:project, dataDirectory:path.join(project,'cache'), ai:{apiKey:'',model:''}});
+  try {
+    await page.goto(await server.listen(0));
+    await expect(page.locator('.snapshot-state')).toContainText('部分完成');
+    await page.getByRole('combobox',{name:'搜索文件或符号'}).fill('run');
+    await page.getByRole('option',{name:/^run/}).first().click();
+    await page.getByRole('tab',{name:/^关系/}).click();
+    for (const [width,height] of [[1440,900],[768,1024],[390,844]]) {
+      await page.setViewportSize({width,height});
+      await expect(page.locator('.relations-body').getByRole('heading',{name:/解析缺口/})).toBeVisible();
+      const external = page.locator('.connection-section').filter({has:page.getByRole('heading',{name:/外部引用/})});
+      await expect(external).toContainText('JSON');
+      await external.getByRole('heading').scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({path:path.join(parent,`resolution-${width}.png`),fullPage:true,animations:'disabled'});
+    }
+    await page.locator('.connection-section').filter({has:page.getByRole('heading',{name:/外部引用/})}).getByRole('button').first().click();
+    await expect(page.locator('.source-code')).toContainText('JSON.stringify');
+    await page.setViewportSize({width:1440,height:900});
+    await page.getByRole('combobox',{name:'搜索文件或符号'}).fill('run');
+    await page.getByRole('option',{name:/^run/}).first().click();
+    await page.getByRole('tab',{name:/^关系/}).click();
+    await page.getByRole('button',{name:/查看 system.link 的调用证据/}).click();
+    await page.setViewportSize({width:390,height:844});
+    await expect(page.locator('.proof-heading')).toContainText('4 处来源依据');
+    await expect(page.locator('.proof-row')).toHaveCount(5);
+    await page.screenshot({path:path.join(parent,'factory-proofs-390.png'),fullPage:true,animations:'disabled'});
+  } finally {
+    await server.app.close();
+    if (!project.startsWith(parent+path.sep)) throw Error('Unexpected cleanup path');
+    rmSync(project,{recursive:true,force:true});
+  }
+});

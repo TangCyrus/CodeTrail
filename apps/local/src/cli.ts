@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { analyzeProject } from "@codetrail/analyzer";
+import { summarizeResolution } from "@codetrail/shared";
 
 const HELP = `CodeTrail — local code explorer
 
@@ -100,7 +101,8 @@ async function main(args: string[]): Promise<void> {
     }
   } else process.stdout.write(json);
   const stats = snapshot.statistics;
-  process.stderr.write(`[${snapshot.status}] ${stats.files} files, ${stats.symbols} symbols, ${stats.relations} relations, ${stats.unresolved} unresolved, ${snapshot.diagnostics.length} diagnostics (${stats.durationMs} ms)\n`);
+  const resolution = summarizeResolution(snapshot.unresolved);
+  process.stderr.write(`[${snapshot.status}] ${stats.files} files, ${stats.symbols} symbols, ${stats.relations} relations, ${resolution.gaps} gaps, ${resolution.external} external references (${resolution.totalUnlinked} unlinked total), ${snapshot.diagnostics.length} diagnostics (${stats.durationMs} ms)\n`);
   if (output) process.stderr.write(`Snapshot: ${path.resolve(output)}\n`);
 }
 

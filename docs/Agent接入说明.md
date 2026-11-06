@@ -1,4 +1,4 @@
-# Agent 接入说明（0.5.0）
+# Agent 接入说明（0.6.0）
 
 CodeTrail 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 查询架构、阅读顺序、符号关系、源码证据及 Git 改动影响。浏览器工作台仍可独立运行，也可以与 MCP 共用快照。
 
@@ -20,7 +20,7 @@ npm ci --ignore-scripts
 npm run build
 ```
 
-预编译 **0.5.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
+预编译 **0.6.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
 
 ## 生成接入包
 
@@ -96,6 +96,10 @@ tool_timeout_sec = 90
 固定快照查询都要求明确的 `snapshotId`。比较内的证据只能用其 `comparisonId` 和对应版本读取，不能拿比较的快照 ID 去普通快照查询。符号/文件 ID 必须来自相应结果，不接受任意磁盘路径。
 
 结果同时提供 JSON 文本和结构化内容，包含版本、过期、截断与证据身份；部分解析保留诊断和未解析关系。`status: complete` 只表示分析诊断状态，不承诺完整依赖关系。
+
+0.6.0 使用 `resolutionSummary.gaps` 查看真实缺口，`external` 查看分析范围外的引用，`byReason` 查看原因分布；`totalUnlinked` 等于两者之和。为兼容旧快照，`statistics.unresolved` 及顶层旧 `unresolved` 数字仍包含外部引用。`symbol_context` 的 `unresolvedDetails` 与 `externalReferences` 分开返回，各最多十项，节点完整计数见 `nodeResolutionSummary`；比较两侧计数见 `resolutionSummary.base/current`。
+
+部分解构调用具有额外的 `supportingEvidenceIds`，用于核对工厂返回值到实现的来源。它们与调用位置的主证据同属当前快照或比较版本，应使用同一 `snapshotId`，或同一 `comparisonId` 和 `side` 继续读取；不要仅凭类型签名认定实际实现。详见 [核心调用验证](核心调用与外部引用验证记录.md)。
 
 普通查询最多内嵌八份证据摘要；完整证据使用 ID 再取。源码窗口总文本最多 12,000 字符，单行最多 2,000 字符；省略会标明。每次结果最多 48,000 个 JSON 字符，超过则返回可恢复的 `RESULT_TOO_LARGE`，应缩小查询或分页。服务不静默切断 JSON。源码行列以一为起点，文件哈希为完整源码的 SHA-256，不能用截断窗口重算该哈希。
 
