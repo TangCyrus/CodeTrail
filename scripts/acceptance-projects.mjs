@@ -19,14 +19,14 @@ export function copyRepresentative(name, destination) {
 export function gitInOwnedDemo(directory, args) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith("GIT_")));
   Object.assign(env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null", GIT_TERMINAL_PROMPT: "0" });
-  return execFileSync("git", ["-c", "core.autocrlf=false", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${path.join(directory, ".git/codegraph-no-hooks")}`, "-c", "commit.gpgsign=false", "-c", "user.name=CodeGraph Acceptance", "-c", "user.email=acceptance@example.invalid", "-C", directory, ...args], { encoding: "utf8", windowsHide: true, env });
+  return execFileSync("git", ["-c", "core.autocrlf=false", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${path.join(directory, ".git/codetrail-no-hooks")}`, "-c", "commit.gpgsign=false", "-c", "user.name=CodeTrail Acceptance", "-c", "user.email=acceptance@example.invalid", "-C", directory, ...args], { encoding: "utf8", windowsHide: true, env });
 }
 
 export function prepareGitDemo(destination) {
   copyRepresentative("git-alias", destination);
   gitInOwnedDemo(destination, ["init", "--quiet", "--initial-branch=main"]);
   gitInOwnedDemo(destination, ["add", "--all"]);
-  gitInOwnedDemo(destination, ["commit", "--quiet", "-m", "CodeGraph acceptance baseline"]);
+  gitInOwnedDemo(destination, ["commit", "--quiet", "-m", "CodeTrail acceptance baseline"]);
   writeFileSync(path.join(destination, "src/pricing/amount.ts"), "export function amount(value: number, floor = 1): number { return value < floor ? floor : value; }\n");
   gitInOwnedDemo(destination, ["add", "--", "src/pricing/amount.ts"]);
   writeFileSync(path.join(destination, "src/pricing/amount.ts"), "export function amount(value: number, floor = 2): number { return value < floor ? floor : value; }\n");

@@ -1,11 +1,11 @@
 ---
-name: codegraph-impact
-description: "Use CodeGraph MCP to assess the potential impact of TS/JS changes against Git HEAD, inspect static dependency paths and verify old/new source evidence. Use for change impact questions and before/after checks around authorized edits; this is not a test runner or proof of coverage."
+name: codetrail-impact
+description: "Use CodeTrail MCP to assess the potential impact of TS/JS changes against Git HEAD, inspect static dependency paths and verify old/new source evidence. Use for change impact questions and before/after checks around authorized edits; this is not a test runner or proof of coverage."
 ---
 
-# Inspect change impact with CodeGraph
+# Inspect change impact with CodeTrail
 
-CodeGraph compares the configured project's Git HEAD with actual working source, including staged, unstaged and included untracked files. It does not compare arbitrary before/after checkpoints, modify Git state, execute tests or edit source.
+CodeTrail compares the configured project's Git HEAD with actual working source, including staged, unstaged and included untracked files. It does not compare arbitrary before/after checkpoints, modify Git state, execute tests or edit source.
 
 For an authorized edit, use `project_overview` with `refresh: true` to verify the configured root and obtain a current `snapshotId`. Search the target symbols with `search_symbols`; inspect relevant `symbol_context` and `read_evidence` before modifying unfamiliar code. Perform edits with the host's normal tools within the user's scope. When the user only asks to assess existing changes, do not make edits.
 

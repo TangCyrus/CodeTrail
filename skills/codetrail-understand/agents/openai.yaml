@@ -1,0 +1,9 @@
+interface:
+  display_name: "CodeTrail 理解项目"
+  short_description: "Understand architecture with source-backed CodeTrail tools"
+  default_prompt: "Use $codetrail-understand to explain this project's architecture and recommend where to start reading, with source evidence."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "codetrail"
+      description: "Local CodeTrail structural analysis and source evidence"

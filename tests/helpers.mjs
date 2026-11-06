@@ -1,12 +1,15 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { analyzeProject } from "../packages/analyzer/dist/index.js";
 import { projectRoot } from "../scripts/fixture-tools.mjs";
 
 const temporaryRoot = path.join(projectRoot, "artifacts/test-temp");
-export function tempProject(t, files = {}) {
-  mkdirSync(temporaryRoot, { recursive: true });
-  const root = mkdtempSync(path.join(temporaryRoot, "project-"));
+export function tempProject(t, files = {}, { outsideRepository = false } = {}) {
+  // Non-repository fixtures must not discover this checkout's .git in a parent directory.
+  const baseDirectory = outsideRepository ? path.join(os.tmpdir(), "codetrail-tests") : temporaryRoot;
+  mkdirSync(baseDirectory, { recursive: true });
+  const root = mkdtempSync(path.join(baseDirectory, "project-"));
   const write = (name, text) => {
     const destination = path.resolve(root, name);
     if (!destination.startsWith(root + path.sep)) throw new Error("Test file escaped its temporary project");
@@ -16,7 +19,7 @@ export function tempProject(t, files = {}) {
   for (const [name, text] of Object.entries(files)) write(name, text);
   t.after(() => {
     const resolved = path.resolve(root);
-    const allowed = path.resolve(temporaryRoot) + path.sep;
+    const allowed = path.resolve(baseDirectory) + path.sep;
     if (!resolved.startsWith(allowed)) throw new Error("Refusing cleanup outside the test workspace");
     rmSync(resolved, { recursive: true, force: true });
   });

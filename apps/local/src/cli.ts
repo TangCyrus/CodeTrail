@@ -3,13 +3,13 @@ import { mkdirSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { analyzeProject } from "@codegraph/analyzer";
+import { analyzeProject } from "@codetrail/analyzer";
 
-const HELP = `CodeGraph — local code explorer
+const HELP = `CodeTrail — local code explorer
 
-Usage: codegraph analyze <directory> [--out <snapshot.json>] [--max-files <count>]
-       codegraph open <directory> [--port <port>] [--data-dir <cache-directory>] [--no-browser]
-       codegraph mcp <directory> [--data-dir <cache-directory>] [--workbench]
+Usage: codetrail analyze <directory> [--out <snapshot.json>] [--max-files <count>]
+       codetrail open <directory> [--port <port>] [--data-dir <cache-directory>] [--no-browser]
+       codetrail mcp <directory> [--data-dir <cache-directory>] [--workbench]
 
 Without --out, writes the snapshot JSON to stdout. Summary goes to stderr.
 open serves the browser workbench on 127.0.0.1. Analysis never executes project code or uses AI.
@@ -57,7 +57,7 @@ async function main(args: string[]): Promise<void> {
     let url: string;
     try { url = await server.listen(port); }
     catch (error) { await server.app.close(); throw error; }
-    process.stdout.write(`CodeGraph 本地工作台\n项目：${server.manager.rootDir}\n${url}\n按 Ctrl+C 停止服务。\n`);
+    process.stdout.write(`CodeTrail 本地工作台\n项目：${server.manager.rootDir}\n${url}\n按 Ctrl+C 停止服务。\n`);
     const stop = (): void => { void server.app.close().then(() => { process.exitCode = 0; }); };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);

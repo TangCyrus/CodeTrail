@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { root, prepareGitDemo } from "./acceptance-projects.mjs";
 import { createCodexKit } from "./setup-codex.mjs";
 
-const parent = path.join(root, "artifacts/phase-six"); mkdirSync(parent, { recursive: true });
+const parent = path.join(root, "artifacts/agent-acceptance"); mkdirSync(parent, { recursive: true });
 const run = mkdtempSync(path.join(parent, "codex-"));
 const project = prepareGitDemo(path.join(run, "中文 项目"));
 const kit = createCodexKit(project, path.join(run, "接入包"));
@@ -15,7 +15,7 @@ cpSync(path.join(kit.output, "skills"), path.join(project, ".agents/skills"), { 
 const codexHome = path.join(run, "isolated-codex-home"); mkdirSync(codexHome);
 // This provider is never called. No turn is started and no account/credentials are loaded.
 writeFileSync(path.join(codexHome, "config.toml"), `model_provider = "protocol_probe"\nmodel = "protocol-only-no-generation"\n[model_providers.protocol_probe]\nname = "Protocol-only acceptance"\nbase_url = "http://127.0.0.1:9/v1"\nwire_api = "responses"\n\n${kit.config}`);
-const executable = process.env.CODEGRAPH_CODEX_EXE ?? "codex";
+const executable = process.env.CODETRAIL_CODEX_EXE ?? "codex";
 const version = execFileSync(executable, ["--version"], { encoding: "utf8", windowsHide: true }).trim();
 const hostEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|USERPROFILE|LOCALAPPDATA|APPDATA|COMSPEC|PROCESSOR_ARCHITECTURE)$/i.test(key)));
 const child = spawn(executable, ["app-server", "--stdio"], { cwd: project, env: { ...hostEnvironment, CODEX_HOME: codexHome }, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
@@ -45,26 +45,26 @@ function request(method, params) {
 }
 let result;
 try {
-  const initialized = await request("initialize", { clientInfo: { name: "codegraph_acceptance", version: "0.2.0", title: "CodeGraph host acceptance" }, capabilities: { experimentalApi: true } });
+  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.3.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
   child.stdin.write(JSON.stringify({ method: "initialized", params: {} }) + "\n");
   const skills = await request("skills/list", { cwds: [project], forceReload: true });
   writeFileSync(path.join(run, "skills-discovery.json"), JSON.stringify(skills, null, 2));
   const skillNames = skills.data.flatMap((entry) => entry.skills.map((skill) => skill.name));
-  assert.ok(skillNames.includes("codegraph-understand")); assert.ok(skillNames.includes("codegraph-impact"));
+  assert.ok(skillNames.includes("codetrail-understand")); assert.ok(skillNames.includes("codetrail-impact"));
   assert.ok(skills.data.every((entry) => entry.errors.length === 0));
-  assert.ok(skills.data.flatMap((entry) => entry.skills).filter((skill) => skill.name.startsWith("codegraph-")).every((skill) => skill.enabled));
+  assert.ok(skills.data.flatMap((entry) => entry.skills).filter((skill) => skill.name.startsWith("codetrail-")).every((skill) => skill.enabled));
   const thread = await request("thread/start", { cwd: project, ephemeral: true, approvalPolicy: "never", sandbox: "read-only" });
   const threadId = thread.thread.id;
-  const inventory = await request("mcpServerStatus/list", { threadId, serverName: "codegraph" });
+  const inventory = await request("mcpServerStatus/list", { threadId, serverName: "codetrail" });
   writeFileSync(path.join(run, "host-inventory.json"), JSON.stringify(inventory, null, 2));
-  const status = inventory.data.find((entry) => entry.name === "codegraph");
-  assert.ok(status, "Codex must discover the codegraph server");
+  const status = inventory.data.find((entry) => entry.name === "codetrail");
+  assert.ok(status, "Codex must discover the codetrail server");
   assert.equal(status.runtimeStatus, "connected");
   const toolNames = Object.keys(status.tools).map((name) => name.replace(/^.*__/, "")).sort();
   assert.equal(toolNames.length, 6);
   async function call(tool, args = {}) {
     const started = performance.now();
-    const response = await request("mcpServer/tool/call", { threadId, server: "codegraph", tool, arguments: args });
+    const response = await request("mcpServer/tool/call", { threadId, server: "codetrail", tool, arguments: args });
     assert.notEqual(response.isError, true, JSON.stringify(response));
     const data = response.structuredContent ?? JSON.parse(response.content[0].text);
     assert.equal(data.sourceTrust, "untrusted-repository-data");
@@ -93,7 +93,7 @@ try {
   const refreshed = await call("compare_worktree", { refresh: true });
   assert.equal(refreshed.stale, false); assert.notEqual(refreshed.comparisonId, comparison.comparisonId);
   result = { passed: true, host: version, run, project, serverVersion: status.serverInfo?.version ?? null,
-    discoveredSkills: skillNames.filter((name) => name.startsWith("codegraph-")), tools: toolNames,
+    discoveredSkills: skillNames.filter((name) => name.startsWith("codetrail-")), tools: toolNames,
     toolCalls: calls.length, maxResultCharacters: Math.max(...calls.map((call) => JSON.stringify(call.result).length)), modelTurns: 0, modelCalls: 0, userConfigurationModified: false,
     validation: "Actual Codex app-server discovery and tool invocation; deterministic harness chooses calls. This does not evaluate model tool selection or explanation quality.",
     checks: ["skill discovery", "stdio server discovery", "architecture/search/context/source/reading", "HEAD comparison with base evidence", "edit staleness and explicit refresh"] };

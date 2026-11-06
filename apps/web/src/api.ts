@@ -1,12 +1,12 @@
-import type { AnalysisJob } from "@codegraph/shared";
+import type { AnalysisJob } from "@codetrail/shared";
 
 const params = new URLSearchParams(window.location.hash.slice(1));
 const incoming = params.get("session");
 if (incoming) {
-  sessionStorage.setItem("codegraph.session", incoming);
+  sessionStorage.setItem("codetrail.session", incoming);
   history.replaceState(null, "", window.location.pathname + window.location.search);
 }
-export const sessionToken = incoming ?? sessionStorage.getItem("codegraph.session");
+export const sessionToken = incoming ?? sessionStorage.getItem("codetrail.session");
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, {

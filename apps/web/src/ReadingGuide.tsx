@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { EvidenceDetail, ExplorerNode, ReadingGuide as GuideData, ReadingList } from "@codegraph/shared";
+import type { EvidenceDetail, ExplorerNode, ReadingGuide as GuideData, ReadingList } from "@codetrail/shared";
 import { api, ignoredAbort, messageOf, snapshotPath } from "./api.js";
 import { Icon, InlineError, kindLabel, LoadingRows, NodeGlyph } from "./ui.js";
 

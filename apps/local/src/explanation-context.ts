@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { recommendReading, type ProjectExplorer } from "@codegraph/graph";
-import type { CitedFact, ContextEvidence, ExplanationAction, ExplanationPreview, ReadingAudience, SourceRange } from "@codegraph/shared";
+import { recommendReading, type ProjectExplorer } from "@codetrail/graph";
+import type { CitedFact, ContextEvidence, ExplanationAction, ExplanationPreview, ReadingAudience, SourceRange } from "@codetrail/shared";
 import type { SnapshotStore } from "./store.js";
 
 export const CONTEXT_VERSION = "code-context-1";

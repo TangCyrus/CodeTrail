@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
-import { isSnapshotStale } from "@codegraph/analyzer";
-import { calculateComparisonImpact } from "@codegraph/graph";
-import type { ComparisonBundle, ComparisonJob, ComparisonReport } from "@codegraph/shared";
+import { isSnapshotStale } from "@codetrail/analyzer";
+import { calculateComparisonImpact } from "@codetrail/graph";
+import type { ComparisonBundle, ComparisonJob, ComparisonReport } from "@codetrail/shared";
 import type { SnapshotStore } from "./store.js";
 import { inspectGit } from "./git.js";
 

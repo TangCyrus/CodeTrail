@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AnalysisJob, EvidenceDetail, ExplorerEdge, ExplorerGraph, ExplorerNode, ProjectOverview, SearchResults, SessionInfo } from "@codegraph/shared";
+import type { AnalysisJob, EvidenceDetail, ExplorerEdge, ExplorerGraph, ExplorerNode, ProjectOverview, SearchResults, SessionInfo } from "@codetrail/shared";
 import { api, ignoredAbort, messageOf, sessionToken, snapshotPath, watchAnalysis } from "./api.js";
 import { GraphView } from "./GraphView.js";
 import { Inspector, type SourceTarget } from "./Inspector.js";
 import { ReadingGuide } from "./ReadingGuide.js";
 import { ImpactPage } from "./ImpactPage.js";
 import { ComparisonSource } from "./ComparisonSource.js";
-import type { ComparisonSourceTarget } from "@codegraph/shared";
+import type { ComparisonSourceTarget } from "@codetrail/shared";
 import { BrandMark, Icon, InlineError, kindLabel, LoadingRows, NodeGlyph } from "./ui.js";
 
 const phaseLabel: Record<string, string> = { queued: "准备分析", scanning: "扫描文件", compiling: "解析符号", extracting: "提取引用关系", verifying: "核实输入版本", saving: "保存源码快照" };
@@ -223,7 +223,7 @@ export default function App() {
     : graph?.breadcrumbs ?? [{ id: null, label: "架构概览", kind: "overview" }];
 
   return <div className={`workbench ${navOpen ? "navigation-open" : ""} ${sourceOpen ? "source-open" : ""}`}>
-    <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setNavOpen(!navOpen)} aria-label="打开项目导航" aria-expanded={navOpen}><Icon name="menu"/></button><a className="brand" href="/" onClick={(event) => { event.preventDefault(); goTo(null); }}><BrandMark/><span>CodeGraph</span></a><span className="workspace-separator">/</span><span className="workspace-name" title={session?.rootDir}>{session?.projectName ?? "本地工作台"}</span>
+    <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setNavOpen(!navOpen)} aria-label="打开项目导航" aria-expanded={navOpen}><Icon name="menu"/></button><a className="brand" href="/" onClick={(event) => { event.preventDefault(); goTo(null); }}><BrandMark/><span>CodeTrail</span></a><span className="workspace-separator">/</span><span className="workspace-name" title={session?.rootDir}>{session?.projectName ?? "本地工作台"}</span>
       <div className="global-search" ref={searchBox}><Icon name="search"/><input ref={searchRef} type="search" aria-label="搜索文件或符号" placeholder="搜索文件、符号或路径" disabled={!overview} value={query} role="combobox" aria-expanded={searchOpen && !!query.trim()} aria-controls="search-results" aria-activedescendant={search?.results[searchIndex] ? `search-${searchIndex}` : undefined} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }} onKeyDown={(event) => {
         if (event.key === "ArrowDown") { event.preventDefault(); setSearchIndex((value) => Math.min((search?.results.length ?? 1) - 1, value + 1)); }
         if (event.key === "ArrowUp") { event.preventDefault(); setSearchIndex((value) => Math.max(0, value - 1)); }

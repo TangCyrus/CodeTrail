@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ComparisonJob, ComparisonPath, ComparisonReport, ComparisonSide, ComparisonSourceTarget, ExplorerNode, FileChange, GitBaseline, SymbolChangeKind } from "@codegraph/shared";
+import type { ComparisonJob, ComparisonPath, ComparisonReport, ComparisonSide, ComparisonSourceTarget, ExplorerNode, FileChange, GitBaseline, SymbolChangeKind } from "@codetrail/shared";
 import { api, ignoredAbort, messageOf } from "./api.js";
 import { Icon, InlineError, LoadingRows, relationLabel } from "./ui.js";
 

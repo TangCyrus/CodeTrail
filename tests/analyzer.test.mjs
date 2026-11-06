@@ -97,12 +97,14 @@ test("nested gitignore negation works while default dependency exclusions cannot
     "nested/keep.ts": "export const kept = 1;",
     "nested/drop.ts": "export const dropped = 2;",
     "node_modules/poison.ts": "throw new Error('must never be read');",
-    ".codegraphignore": "blocked/\n",
+    ".codetrail/poison.ts": "throw new Error('cache source must never be read');",
+    ".codetrailignore": "blocked/\n",
     "blocked/secret.js": "export const blocked = 1;",
   });
   const snapshot = project.analyze();
   assert.deepEqual(snapshot.files.map((file) => file.path), ["nested/keep.ts"]);
   assert.ok(snapshot.skipped.some((item) => item.path === "node_modules" && item.reason === "ignored"));
+  assert.ok(snapshot.skipped.some((item) => item.path === ".codetrail" && item.reason === "ignored"));
 });
 
 test("file and byte limits produce explicit partial results", (t) => {
@@ -167,7 +169,7 @@ test("dependency declarations linked within the selected root remain readable an
     "packages/demo/package.json": '{"name":"demo","types":"index.d.ts"}',
     "packages/demo/index.d.ts": "export declare function external(): number;",
     "node_modules/.keep": "",
-    ".codegraphignore": "packages/\n",
+    ".codetrailignore": "packages/\n",
     "index.ts": "import { external } from 'demo'; export function run() { return external(); }",
   });
   try { symlinkSync(path.join(project.root, "packages/demo"), path.join(project.root, "node_modules/demo"), process.platform === "win32" ? "junction" : "dir"); }

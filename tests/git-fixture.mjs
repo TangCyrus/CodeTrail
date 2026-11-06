@@ -5,7 +5,7 @@ import path from "node:path";
 export const gitCommand = (root, args) => {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith("GIT_")));
   Object.assign(env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null", GIT_TERMINAL_PROMPT: "0" });
-  return execFileSync("git", ["-c", "core.autocrlf=false", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${path.join(root, ".git/codegraph-disabled-hooks")}`, "-c", "user.name=CodeGraph Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "-C", root, ...args], { windowsHide: true, encoding: "utf8", env });
+  return execFileSync("git", ["-c", "core.autocrlf=false", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${path.join(root, ".git/codetrail-disabled-hooks")}`, "-c", "user.name=CodeTrail Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "-C", root, ...args], { windowsHide: true, encoding: "utf8", env });
 };
 export function createGitFixture(root, commit = true) {
   mkdirSync(root, { recursive: true });

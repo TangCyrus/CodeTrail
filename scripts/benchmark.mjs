@@ -20,7 +20,7 @@ const worker = async (mode, directory, cache) => {
 };
 const cases = representativeProjects.map((project) => ({ name: project.name, directory: project.name === "git-alias" ? prepareGitDemo(path.join(run, "git-alias")) : path.join(root, "examples", project.name), kind: "representative" }));
 for (const count of [100, 500]) cases.push({ name: `generated-${count}`, directory: generateWorkload(path.join(run, `generated-${count}`), count), kind: "generated" });
-cases.push({ name: "codegraph-self", directory: root, kind: "self" });
+cases.push({ name: "codetrail-self", directory: root, kind: "self" });
 try { report.environment.git = (await execute("git", ["--version"], { windowsHide: true })).stdout.trim(); } catch { report.environment.git = "unavailable"; }
 for (const item of cases) {
   process.stdout.write(`Benchmark: ${item.name}\n`);

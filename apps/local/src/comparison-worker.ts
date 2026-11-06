@@ -1,9 +1,9 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { mkdirSync, mkdtempSync, rmSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { analyzeProject, isSnapshotStale } from "@codegraph/analyzer";
-import { compareSnapshots } from "@codegraph/graph";
-import type { AnalysisSnapshot, CapturedSource, ComparisonBundle, ComparisonJob } from "@codegraph/shared";
+import { analyzeProject, isSnapshotStale } from "@codetrail/analyzer";
+import { compareSnapshots } from "@codetrail/graph";
+import type { AnalysisSnapshot, CapturedSource, ComparisonBundle, ComparisonJob } from "@codetrail/shared";
 import { existingBaselinePaths, inspectGit, isSourcePath, materializeBaseline, publicBaseline, sha } from "./git.js";
 
 const { rootDir, temporaryDirectory } = workerData as { rootDir: string; temporaryDirectory: string };

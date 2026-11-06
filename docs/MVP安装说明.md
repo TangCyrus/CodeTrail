@@ -1,16 +1,18 @@
-# CodeGraph MVP 安装与使用
+# CodeTrail MVP 安装与使用
 
-当前为本地试用版 0.2.0，验证平台为 Windows 11。需要 Node.js 24.x；源码安装另需 npm 11+，改动影响另需 Git。项目没有账号、云端服务或外部数据库要求。Agent 集成入口见 [Agent 接入说明](Agent接入说明.md)，本页主要介绍独立工作台。
+当前为本地试用版 0.3.0，验证平台为 Windows 11。需要 Node.js 24.x；源码安装另需 npm 11+，改动影响另需 Git。项目没有账号、云端服务或外部数据库要求。Agent 集成入口见 [Agent 接入说明](Agent接入说明.md)，本页主要介绍独立工作台。
+
+从旧版本升级须同步更新名称与配置，见 [0.3.0 迁移说明](命名迁移说明.md)。
 
 ## 使用预编译包
 
-将 `codegraph-mvp-0.2.0-win32-x64.zip` 完整解压到一个可写目录，保留 `apps`、`packages`、`node_modules`、`skills` 等目录结构。预编译包已包含所需生产依赖，不需要 npm 安装或构建。Node.js 和 Git 由本机提供。旧版 0.1.0 仍可独立浏览，但不提供 MCP。
+将 `codetrail-mvp-0.3.0-win32-x64.zip` 完整解压到一个可写目录，保留 `apps`、`packages`、`node_modules`、`skills` 等目录结构。预编译包已包含所需生产依赖，不需要 npm 安装或构建。Node.js 和 Git 由本机提供。旧版 0.1.0 仍可独立浏览，但不提供 MCP。
 
 在解压目录打开 PowerShell：
 
 ```powershell
 node --version
-.\codegraph.cmd open "D:\你的项目目录"
+.\codetrail.cmd open "D:\你的项目目录"
 ```
 
 默认监听 `127.0.0.1:4317` 并打开浏览器。也可以使用等价的 Node 命令：
@@ -64,8 +66,8 @@ node scripts/prepare-demo.mjs
 
 ```powershell
 $env:OPENAI_API_KEY = "你的 API Key"
-$env:CODEGRAPH_OPENAI_MODEL = "支持 Responses 结构化输出的可用模型 ID"
-.\codegraph.cmd open "D:\你的项目目录"
+$env:CODETRAIL_OPENAI_MODEL = "支持 Responses 结构化输出的可用模型 ID"
+.\codetrail.cmd open "D:\你的项目目录"
 ```
 
 密钥仅由本地服务读取，程序不自动加载 `.env`，浏览器不保存密钥。服务每次启动默认关闭 AI；在节点解释中启用并明确点击发送后，所预览的相对路径、签名、事实和片段才发送至配置端点。未配置时可直接使用所有本地阅读和 Git 能力。
@@ -74,22 +76,22 @@ $env:CODEGRAPH_OPENAI_MODEL = "支持 Responses 结构化输出的可用模型 I
 
 ## 数据、升级与卸载
 
-默认缓存为 `%LOCALAPPDATA%\CodeGraph\cache`，按项目路径隔离。普通快照和 Git 比较分别保留最近三份，包含完整纳入源码；阅读进度、AI 解释及反馈也保存在本机。可以从启动参数指定独立缓存：
+默认缓存为 `%LOCALAPPDATA%\CodeTrail\cache`，按项目路径隔离。普通快照和 Git 比较分别保留最近三份，包含完整纳入源码；阅读进度、AI 解释及反馈也保存在本机。可以从启动参数指定独立缓存：
 
 ```powershell
-.\codegraph.cmd open "D:\你的项目目录" --data-dir "D:\CodeGraph缓存"
+.\codetrail.cmd open "D:\你的项目目录" --data-dir "D:\CodeTrail缓存"
 ```
 
 升级时先停止旧服务，在新目录启动新版，再使用新会话链接。首次试用也可指定新的缓存目录。出现缓存损坏时使用 `--data-dir` 指向新的可写目录，保留旧目录以便排查；程序不会自动删除损坏缓存。
 
-卸载时停止服务，删除工具解压目录。需要同时清理本地源码副本和进度时，再删除自己选择的 CodeGraph 缓存目录；清理缓存会丢失阅读清单、解释和历史证据。不要删除被分析的项目目录。
+卸载时停止服务，删除工具解压目录。需要同时清理本地源码副本和进度时，再删除自己选择的 CodeTrail 缓存目录；清理缓存会丢失阅读清单、解释和历史证据。不要删除被分析的项目目录。
 
 ## 常见问题
 
 - 无法启动：确认 Node 主版本为 24，完整解压了依赖与前端资源。
 - 端口占用：用 `--port 0` 或指定其他端口。
 - 会话失效：使用当前终端新输出的完整链接；旧标签页的凭证不适用于新服务。
-- 没有完整图谱：查看分析诊断、未解析项和 `.codegraphignore`；不要把“完成”理解为关系完整。
+- 没有完整图谱：查看分析诊断、未解析项和 `.codetrailignore`；不要把“完成”理解为关系完整。
 - 非 UTF-8 或超过 1 MiB 的源码：明确跳过并保留其他健康文件；可在目标项目中自行调整编码或缩小范围。
 - Git 不可用、无提交：继续本地阅读；完整历史影响需要可读的 HEAD 基线。
 - AI 断网/超时/无效引用：保留本地说明，可以取消或稍后重试。
@@ -107,4 +109,4 @@ npm run release
 npm run verify:release
 ```
 
-浏览器测试使用本机安装的 Chrome，也可通过 `CODEGRAPH_BROWSER_CHANNEL=msedge` 选择 Edge；不会自动下载浏览器。打包默认使用本地 npm 缓存离线安装锁定的生产依赖，缓存不全时可显式执行 `npm run release -- --online`。构建和 ZIP 校验产物保存在 `artifacts/`，不上传外部平台。
+浏览器测试使用本机安装的 Chrome，也可通过 `CODETRAIL_BROWSER_CHANNEL=msedge` 选择 Edge；不会自动下载浏览器。打包默认使用本地 npm 缓存离线安装锁定的生产依赖，缓存不全时可显式执行 `npm run release -- --online`。构建和 ZIP 校验产物保存在 `artifacts/`，不上传外部平台。

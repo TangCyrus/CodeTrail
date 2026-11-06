@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ReactFlow, Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, Controls, Handle, MarkerType, Position, type Node, type NodeProps, type Edge, type EdgeProps, type ReactFlowInstance } from "@xyflow/react";
-import type { ExplorerEdge, ExplorerGraph, ExplorerNode } from "@codegraph/shared";
+import type { ExplorerEdge, ExplorerGraph, ExplorerNode } from "@codetrail/shared";
 import type { LayoutReply } from "./layout-worker.js";
 import { Icon, kindLabel, NodeGlyph, relationLabel, InlineError } from "./ui.js";
 

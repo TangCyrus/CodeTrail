@@ -1,4 +1,4 @@
-import type { AnalysisSnapshot, Breadcrumb, ExplorerEdge, ExplorerGraph, ExplorerNode, NodeConnection, NodeDetail, ProjectOverview, RelationRecord, SearchResults } from "@codegraph/shared";
+import type { AnalysisSnapshot, Breadcrumb, ExplorerEdge, ExplorerGraph, ExplorerNode, NodeConnection, NodeDetail, ProjectOverview, RelationRecord, SearchResults } from "@codetrail/shared";
 
 export interface GraphOptions { focus?: string; maxNodes?: number; depth?: number; includeTypes?: boolean; includeReferences?: boolean; includeCandidates?: boolean }
 const basename = (value: string): string => value.split("/").at(-1) ?? value;

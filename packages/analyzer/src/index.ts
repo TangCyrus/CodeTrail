@@ -2,11 +2,11 @@ import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import ts from "typescript";
-import { assertSnapshotIntegrity, type AnalysisSnapshot, type AnalyzerAdapter, type AnalyzeRequest, type AnalysisPhase, type CapturedSource, type EvidenceRecord, type RelationKind, type RelationRecord, type SourceFileRecord, type SymbolKind, type SymbolRecord, type UnresolvedRecord } from "@codegraph/shared";
+import { assertSnapshotIntegrity, type AnalysisSnapshot, type AnalyzerAdapter, type AnalyzeRequest, type AnalysisPhase, type CapturedSource, type EvidenceRecord, type RelationKind, type RelationRecord, type SourceFileRecord, type SymbolKind, type SymbolRecord, type UnresolvedRecord } from "@codetrail/shared";
 import { createCompiler, rangeOf } from "./compiler.js";
 import { hash, scanProject, slash, within } from "./scan.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.3.0";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }

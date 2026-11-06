@@ -1,0 +1,9 @@
+interface:
+  display_name: "CodeTrail 改动影响"
+  short_description: "Trace Git changes through versioned source evidence"
+  default_prompt: "Use $codetrail-impact to assess current changes against HEAD and verify important impact paths with source evidence."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "codetrail"
+      description: "Local CodeTrail Git baseline and impact paths"

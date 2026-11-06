@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { GitBaseline } from "@codegraph/shared";
+import type { GitBaseline } from "@codetrail/shared";
 
 export interface GitTreeEntry { path: string; oid: string; bytes: number; mode: string }
 export interface GitInspection extends GitBaseline {
@@ -79,8 +79,8 @@ function allowedHistoricalPath(name: string): boolean {
   const parts = name.split("/");
   if (path.isAbsolute(name) || name.includes("\\") || parts.some((part) => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part)
     || /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)
-    || [".git", "node_modules", "dist", "build", "coverage", ".next", ".npm-cache", ".codegraph"].includes(part.toLowerCase()) || /^\.env(?:\.|$)/i.test(part))) return false;
-  return isSourcePath(name) || name.endsWith(".json") || [".gitignore", ".codegraphignore"].includes(parts.at(-1)!);
+    || [".git", "node_modules", "dist", "build", "coverage", ".next", ".npm-cache", ".codetrail"].includes(part.toLowerCase()) || /^\.env(?:\.|$)/i.test(part))) return false;
+  return isSourcePath(name) || name.endsWith(".json") || [".gitignore", ".codetrailignore"].includes(parts.at(-1)!);
 }
 
 /** Write only plain blobs into a new, tool-owned directory; never check out or run target code. */

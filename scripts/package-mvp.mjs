@@ -21,7 +21,7 @@ const npm = process.env.npm_execpath ?? path.join(path.dirname(process.execPath)
 if (!existsSync(npm)) throw Error("npm CLI was not found; run this builder using npm run release.");
 process.stdout.write("Installing locked production dependencies into an isolated staging directory…\n");
 await execute(process.execPath, [npm, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", ...(process.argv.includes("--online") ? [] : ["--offline"]), "--cache", path.join(root, ".npm-cache")], { cwd: install, windowsHide: true, timeout: 180_000, maxBuffer: 2 * 1024 * 1024 });
-const name = `codegraph-mvp-${sourceManifest.version}-win32-${process.arch}`, bundle = path.join(run, name); mkdirSync(bundle);
+const name = `codetrail-mvp-${sourceManifest.version}-win32-${process.arch}`, bundle = path.join(run, name); mkdirSync(bundle);
 const allow = (source) => ![".git", ".npmrc"].includes(path.basename(source)) && !/^\.env(?:\.|$)/i.test(path.basename(source));
 for (const workspace of workspaces) cpSync(path.join(install, workspace), path.join(bundle, workspace), { recursive: true, dereference: true, filter: allow });
 // npm's workspace junctions must become ordinary directories before the archive is relocated.
@@ -31,14 +31,14 @@ mkdirSync(path.join(bundle, "scripts"));
 for (const file of ["prepare-demo.mjs", "acceptance-projects.mjs", "setup-codex.mjs"]) cpSync(path.join(root, "scripts", file), path.join(bundle, "scripts", file));
 cpSync(path.join(root, "skills"), path.join(bundle, "skills"), { recursive: true, filter: allow });
 mkdirSync(path.join(bundle, "docs"));
-for (const file of ["MVP安装说明.md", "Agent接入说明.md", "已知限制.md", "用户试用方案.md", "用户试用记录模板.csv", "AI解释评测样本.json"]) {
+for (const file of ["MVP安装说明.md", "Agent接入说明.md", "命名迁移说明.md", "已知限制.md", "用户试用方案.md", "用户试用记录模板.csv", "AI解释评测样本.json"]) {
   if (!existsSync(path.join(root, "docs", file))) throw Error(`Missing release document: ${file}`);
   cpSync(path.join(root, "docs", file), path.join(bundle, "docs", file));
 }
-writeFileSync(path.join(bundle, "package.json"), JSON.stringify({ name: "codegraph-mvp", version: sourceManifest.version, private: true, type: "module", engines: sourceManifest.engines,
+writeFileSync(path.join(bundle, "package.json"), JSON.stringify({ name: "codetrail-mvp", version: sourceManifest.version, private: true, type: "module", engines: sourceManifest.engines,
   scripts: { open: "node apps/local/dist/cli.js open", analyze: "node apps/local/dist/cli.js analyze", mcp: "node apps/local/dist/cli.js mcp", "setup:codex": "node scripts/setup-codex.mjs", "demo:git": "node scripts/prepare-demo.mjs" } }, null, 2));
-writeFileSync(path.join(bundle, "codegraph.cmd"), '@echo off\r\nnode "%~dp0apps\\local\\dist\\cli.js" %*\r\nexit /b %errorlevel%\r\n');
-writeFileSync(path.join(bundle, "README.txt"), `CodeGraph ${sourceManifest.version} — local MCP + Skills + evidence workbench\r\nRequires Node.js 24.x; Git is optional for browsing and required for HEAD comparisons.\r\nAgent setup: node scripts/setup-codex.mjs "D:/your-project" --out "D:/codegraph-kit"\r\nWorkbench: codegraph.cmd open "D:/your-project"\r\nGit demo: node scripts/prepare-demo.mjs\r\nNo npm install or build is needed for this prebuilt bundle.\r\nSee docs/Agent接入说明.md, docs/MVP安装说明.md and docs/已知限制.md.\r\n`);
+writeFileSync(path.join(bundle, "codetrail.cmd"), '@echo off\r\nnode "%~dp0apps\\local\\dist\\cli.js" %*\r\nexit /b %errorlevel%\r\n');
+writeFileSync(path.join(bundle, "README.txt"), `CodeTrail ${sourceManifest.version} — local MCP + Skills + evidence workbench\r\nRequires Node.js 24.x; Git is optional for browsing and required for HEAD comparisons.\r\nAgent setup: node scripts/setup-codex.mjs "D:/your-project" --out "D:/codetrail-kit"\r\nWorkbench: codetrail.cmd open "D:/your-project"\r\nGit demo: node scripts/prepare-demo.mjs\r\nNo npm install or build is needed for this prebuilt bundle.\r\nSee docs/Agent接入说明.md, docs/MVP安装说明.md and docs/已知限制.md.\r\n`);
 const files = [];
 function walk(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {

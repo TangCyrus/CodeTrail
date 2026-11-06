@@ -39,7 +39,7 @@ test("local API requires a session and rejects foreign Origin, Host and root ove
   const staticPage = await fetch(url.origin);
   assert.equal(staticPage.status, 200);
   assert.match(staticPage.headers.get("content-security-policy"), /frame-ancestors 'none'/);
-  assert.match(await staticPage.text(), /CodeGraph/);
+  assert.match(await staticPage.text(), /CodeTrail/);
 });
 
 test("worker analysis streams stages and serves overview, search, graph and matching source evidence", async (t) => {

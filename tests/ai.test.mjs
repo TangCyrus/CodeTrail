@@ -37,6 +37,9 @@ test("AI is off by default, needs both settings, and never exposes the server ke
   service.setEnabled(true);
   assert.equal(mock.requests.length, 0);
   assert.equal(openAIConfiguration({ OPENAI_API_KEY: "test" }).model, "");
+  assert.deepEqual(openAIConfiguration({ OPENAI_API_KEY: "fallback-key", CODETRAIL_OPENAI_API_KEY: "project-key", CODETRAIL_OPENAI_MODEL: "configured-model", CODETRAIL_OPENAI_BASE_URL: "https://models.example.invalid/v1", CODETRAIL_OPENAI_REASONING_EFFORT: "low" }), {
+    apiKey: "project-key", model: "configured-model", baseUrl: "https://models.example.invalid/v1", reasoningEffort: "low",
+  });
 });
 
 test("Responses request sends exactly the approved evidence, schema, budgets and no tools; cached output survives reopening", async (t) => {
@@ -50,6 +53,7 @@ test("Responses request sends exactly the approved evidence, schema, budgets and
   assert.equal(request.body.store, false);
   assert.equal(request.body.model, config.model);
   assert.equal(request.body.text.format.type, "json_schema");
+  assert.equal(request.body.text.format.name, "codetrail_explanation");
   assert.equal(request.body.text.format.strict, true);
   assert.equal(request.body.text.format.schema.additionalProperties, false);
   assert.equal(request.body.max_output_tokens, 3200);

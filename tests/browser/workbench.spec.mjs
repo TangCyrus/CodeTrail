@@ -38,6 +38,10 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(() => { expect(errors).toEqual([]); });
 
 test("architecture overview uses live counts, graph nodes, local fonts and preserved source", async ({ page }) => {
+  await expect(page).toHaveTitle("CodeTrail · 本地代码工作台");
+  await expect(page.locator(".brand")).toHaveText("CodeTrail");
+  expect(await page.evaluate(() => sessionStorage.getItem("codetrail.session"))).toBeTruthy();
+  await page.reload();
   await expect(page.locator(".project-counts")).toContainText("14");
   await expect(page.locator(".graph-card")).toHaveCount(5);
   await expect(page.locator(".source-code")).toBeVisible();

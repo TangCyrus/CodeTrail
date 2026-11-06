@@ -1,4 +1,4 @@
-import type { AnalysisSnapshot, CodeRecommendation, ExplorerNode, ReadingGuide, ReadingStep, RecommendationReason, RelationRecord } from "@codegraph/shared";
+import type { AnalysisSnapshot, CodeRecommendation, ExplorerNode, ReadingGuide, ReadingStep, RecommendationReason, RelationRecord } from "@codetrail/shared";
 import { ProjectExplorer } from "./explorer.js";
 
 const EXCLUDED = /(?:^|\/)(?:__tests__|__mocks__|tests?|fixtures?|generated|dist|coverage)(?:\/|$)|\.(?:test|spec)\.[jt]sx?$|\.d\.ts$/i;

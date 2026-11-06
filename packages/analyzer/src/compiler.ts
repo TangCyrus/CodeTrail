@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import type { AnalysisDiagnostic, SourceRange } from "@codegraph/shared";
+import type { AnalysisDiagnostic, SourceRange } from "@codetrail/shared";
 import { hash, slash, within, type ScanResult } from "./scan.js";
 
 export function rangeOf(file: ts.SourceFile, start: number, end: number): SourceRange {

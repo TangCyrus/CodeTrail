@@ -86,7 +86,7 @@ test("pure type dependency propagation is opt-in and does not become a value cal
 test("line insertion changes offsets without remapping unchanged functions as modified; scope exclusions are not deletions", async (t) => {
   const { fixture, manager } = await setup(t, false);
   fixture.write("src/math.ts", `// inserted heading\n${fixture.files["src/math.ts"]}`);
-  fixture.write(".codegraphignore", "src/obsolete.ts\n");
+  fixture.write(".codetrailignore", "src/obsolete.ts\n");
   const bundle = await done(manager, manager.start());
   const math = bundle.report.changes.find((change) => change.newFile?.path === "src/math.ts");
   assert.ok(math.symbols.every((mapping) => mapping.kind === "unchanged" || mapping.kind === "modified" && mapping.newNode.name === "normalize"));
@@ -102,7 +102,7 @@ test("line insertion changes offsets without remapping unchanged functions as mo
 test("missing repository and unborn HEAD produce explicit current-only reports with no invented historical paths", async (t) => {
   let manager, store;
   t.after(async () => { await manager?.close(); store?.close(); });
-  const project = tempProject(t, { "index.ts": "export const current = 1;" }), cache = tempProject(t);
+  const project = tempProject(t, { "index.ts": "export const current = 1;" }, { outsideRepository: true }), cache = tempProject(t);
   assert.equal((await inspectGit(project.root)).state, "not_repository");
   store = new SnapshotStore(cache.root, project.root); manager = new ComparisonManager(project.root, store);
   let bundle = await done(manager, manager.start());

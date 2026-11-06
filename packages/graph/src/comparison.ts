@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AnalysisSnapshot, CapturedSource, ChangeHunk, ComparisonPath, ComparisonReport, ComparisonSide, FileChange, GitBaseline, ImpactStep, SymbolMapping } from "@codegraph/shared";
+import type { AnalysisSnapshot, CapturedSource, ChangeHunk, ComparisonPath, ComparisonReport, ComparisonSide, FileChange, GitBaseline, ImpactStep, SymbolMapping } from "@codetrail/shared";
 import { ProjectExplorer } from "./explorer.js";
 
 const id = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 24);

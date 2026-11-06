@@ -5,15 +5,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
-import type { AnalysisJob, EvidenceDetail, SessionInfo, SourceWindow } from "@codegraph/shared";
+import type { AnalysisJob, EvidenceDetail, SessionInfo, SourceWindow } from "@codetrail/shared";
 import { AnalysisManager } from "./analysis-manager.js";
-import { recommendReading } from "@codegraph/graph";
-import type { ExplanationAction, ReadingAudience } from "@codegraph/shared";
+import { recommendReading } from "@codetrail/graph";
+import type { ExplanationAction, ReadingAudience } from "@codetrail/shared";
 import { ExplanationService, type OpenAIConfiguration } from "./ai.js";
 import { buildExplanationPreview } from "./explanation-context.js";
 import { ComparisonManager } from "./comparison-manager.js";
 import { inspectGit, publicBaseline } from "./git.js";
-import type { ComparisonSide, ComparisonSourceWindow, SourceRange } from "@codegraph/shared";
+import type { ComparisonSide, ComparisonSourceWindow, SourceRange } from "@codetrail/shared";
 
 export interface LocalServerOptions { rootDir: string; dataDirectory?: string; token?: string; autoAnalyze?: boolean; webDirectory?: string; ai?: OpenAIConfiguration }
 class HttpError extends Error { constructor(readonly statusCode: number, message: string) { super(message); } }
@@ -24,7 +24,7 @@ export async function createLocalServer(options: LocalServerOptions) {
   const rootDir = realpathSync(path.resolve(options.rootDir));
   const token = options.token ?? randomBytes(32).toString("base64url");
   if (token.length < 24) throw new Error("Session token must have at least 24 characters");
-  const dataDirectory = options.dataDirectory ?? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), ".local", "share"), "CodeGraph", "cache");
+  const dataDirectory = options.dataDirectory ?? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), ".local", "share"), "CodeTrail", "cache");
   const manager = new AnalysisManager(rootDir, dataDirectory);
   let ai: ExplanationService;
   try { ai = new ExplanationService(manager.store, options.ai); }

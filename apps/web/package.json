@@ -1,10 +1,10 @@
 {
-  "name": "@codegraph/web",
-  "version": "0.2.0",
+  "name": "@codetrail/web",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@codegraph/shared": "0.2.0",
+    "@codetrail/shared": "0.3.0",
     "@fontsource/ibm-plex-mono": "5.3.0",
     "@fontsource/ibm-plex-sans": "5.3.0",
     "@xyflow/react": "12.12.1",

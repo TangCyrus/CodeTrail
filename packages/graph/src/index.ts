@@ -1,4 +1,4 @@
-import type { AnalysisSnapshot, RelationRecord } from "@codegraph/shared";
+import type { AnalysisSnapshot, RelationRecord } from "@codetrail/shared";
 export { ProjectExplorer } from "./explorer.js";
 export type { GraphOptions } from "./explorer.js";
 export { recommendReading, READING_ALGORITHM_VERSION } from "./reading.js";

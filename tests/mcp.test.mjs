@@ -22,7 +22,7 @@ async function start(t, { project = tempProject(t, files), workbench = false } =
   const cache = tempProject(t);
   const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, "apps/local/dist/cli.js"), "mcp", project.root, "--data-dir", cache.root, ...(workbench ? ["--workbench"] : [])], stderr: "pipe" });
   let stderr = ""; transport.stderr.on("data", (data) => { stderr += data.toString(); });
-  client = new Client({ name: "codegraph-acceptance", version: "1.0" });
+  client = new Client({ name: "codetrail-acceptance", version: "1.0" });
   await client.connect(transport);
   async function raw(name, args = {}, options) { return client.callTool({ name, arguments: args }, options); }
   async function call(name, args = {}) {
@@ -132,7 +132,7 @@ test("Git comparison exposes same-side impact evidence, old deleted source, pagi
 });
 
 test("no Git or no HEAD degrades explicitly while exploration remains available", async (t) => {
-  const project = tempProject(t, files), { call } = await start(t, { project });
+  const project = tempProject(t, files, { outsideRepository: true }), { call } = await start(t, { project });
   const noGit = await call("compare_worktree");
   assert.equal(noGit.baseline.state, "not_repository"); assert.equal(noGit.paths.length, 0);
   gitInOwnedDemo(project.root, ["init", "--quiet"]);
@@ -203,8 +203,8 @@ test("Codex kit uses literal absolute paths, bundles both skills and refuses to 
   const kit = createCodexKit(project.root, target);
   assert.ok(kit.config.includes(JSON.stringify(process.execPath)));
   assert.equal(kit.args[2], project.root);
-  assert.ok(existsSync(path.join(target, "skills/codegraph-understand/SKILL.md")));
-  assert.ok(existsSync(path.join(target, "skills/codegraph-impact/SKILL.md")));
+  assert.ok(existsSync(path.join(target, "skills/codetrail-understand/SKILL.md")));
+  assert.ok(existsSync(path.join(target, "skills/codetrail-impact/SKILL.md")));
   assert.throws(() => createCodexKit(project.root, target), /never overwritten/);
 });
 

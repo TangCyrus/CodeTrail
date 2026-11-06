@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { EvidenceDetail, ExplorerEdge, ExplorerNode, NodeConnection, NodeDetail, ProjectOverview, SourceWindow, ReadingList } from "@codegraph/shared";
+import type { EvidenceDetail, ExplorerEdge, ExplorerNode, NodeConnection, NodeDetail, ProjectOverview, SourceWindow, ReadingList } from "@codetrail/shared";
 import { ExplanationPanel } from "./ExplanationPanel.js";
 import { api, ignoredAbort, messageOf, snapshotPath } from "./api.js";
 import { Icon, InlineError, kindLabel, LoadingRows, NodeGlyph, relationLabel } from "./ui.js";

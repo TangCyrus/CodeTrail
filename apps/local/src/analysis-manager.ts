@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { Worker } from "node:worker_threads";
-import { isSnapshotStale } from "@codegraph/analyzer";
-import { ProjectExplorer } from "@codegraph/graph";
-import type { AnalysisJob, AnalysisPhase, AnalysisSnapshot, CapturedSource } from "@codegraph/shared";
+import { isSnapshotStale } from "@codetrail/analyzer";
+import { ProjectExplorer } from "@codetrail/graph";
+import type { AnalysisJob, AnalysisPhase, AnalysisSnapshot, CapturedSource } from "@codetrail/shared";
 import { SnapshotStore } from "./store.js";
 
 export class AnalysisManager {

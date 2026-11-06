@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import type { ExplorerNode, RelationKind } from "@codegraph/shared";
+import type { ExplorerNode, RelationKind } from "@codetrail/shared";
 
 type IconName = "search" | "folder" | "file" | "graph" | "list" | "arrow" | "back" | "chevron" | "refresh" | "close" | "code" | "link" | "menu" | "info" | "copy" | "check" | "stop" | "bookmark" | "book";
 const paths: Record<IconName, ReactNode> = {

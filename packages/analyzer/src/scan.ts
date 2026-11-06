@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import ignore, { type Ignore } from "ignore";
-import type { AnalysisDiagnostic, AnalyzeRequest, SkippedPath } from "@codegraph/shared";
+import type { AnalysisDiagnostic, AnalyzeRequest, SkippedPath } from "@codetrail/shared";
 
 export const slash = (value: string): string => value.replaceAll("\\", "/");
 export const hash = (value: string | Buffer): string => createHash("sha256").update(value).digest("hex");
@@ -12,7 +12,7 @@ export function within(root: string, target: string): boolean {
 }
 
 const SOURCE = /\.(?:ts|tsx|js|jsx)$/i;
-const HARD_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".npm-cache", ".codegraph"]);
+const HARD_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".npm-cache", ".codetrail"]);
 interface IgnoreLayer { base: string; matcher: Ignore }
 export interface ScannedFile { absolutePath: string; path: string; text: string; hash: string; bytes: number }
 export interface ScanResult {
@@ -43,7 +43,7 @@ export function scanProject(request: AnalyzeRequest): ScanResult {
   }
   function walk(directory: string, inherited: IgnoreLayer[]): void {
     const layers = [...inherited];
-    for (const name of directory === root ? [".gitignore", ".codegraphignore"] : [".gitignore"]) {
+    for (const name of directory === root ? [".gitignore", ".codetrailignore"] : [".gitignore"]) {
       const ignorePath = path.join(directory, name);
       try {
         const info = lstatSync(ignorePath);

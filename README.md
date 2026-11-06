@@ -2,23 +2,25 @@
 
 为 Coding Agent 提供带源码证据的项目架构、符号关系和改动影响，帮助开发者理解并核实 Agent 的判断。
 
-当前 CLI 命令名为 `codegraph`，内部包使用 `@codegraph/*` 命名。
+当前 CLI 命令名为 `codetrail`，内部包使用 `@codetrail/*` 命名。
 
-当前为 **0.2.0 本地 Agent 接入试用版**：提供六个 MCP 工具、理解项目与改动影响两个 Skill，复用已有 TS/JS 解析器、阅读推荐与 Git 双快照。首个验收宿主为 Codex，浏览器工作台可独立使用或共享 MCP 快照。真实用户效果和模型自主调用、语义解释质量仍待验证。
+从旧版本升级时，命令、MCP 服务名、Skill、环境变量及忽略文件需要一起切换，见 [0.3.0 迁移说明](docs/命名迁移说明.md)。
 
-Agent 接入见 [Agent 接入说明](docs/Agent接入说明.md)，独立工作台见 [MVP 安装说明](docs/MVP安装说明.md)，能力边界见 [已知限制](docs/已知限制.md)。Windows 0.2.0 预编译 ZIP 包含 MCP、Skill 和生产依赖；需本机 Node.js 24.x，Git 用于可选的改动比较，无需重新 npm 安装或构建。历史 0.1.0 ZIP 不含 Agent 接入功能。
+当前为 **0.3.0 本地 Agent 接入试用版**：提供六个 MCP 工具、理解项目与改动影响两个 Skill，复用已有 TS/JS 解析器、阅读推荐与 Git 双快照。首个验收宿主为 Codex，浏览器工作台可独立使用或共享 MCP 快照。真实用户效果和模型自主调用、语义解释质量仍待验证。
+
+Agent 接入见 [Agent 接入说明](docs/Agent接入说明.md)，独立工作台见 [MVP 安装说明](docs/MVP安装说明.md)，能力边界见 [已知限制](docs/已知限制.md)。Windows 0.3.0 预编译 ZIP 包含 MCP、Skill 和生产依赖；需本机 Node.js 24.x，Git 用于可选的改动比较，无需重新 npm 安装或构建。历史 0.1.0 ZIP 不含 Agent 接入功能。
 
 ## 接入 Agent
 
-源码完成下方构建后，或在 0.2.0 预编译包根目录，生成接入包：
+源码完成下方构建后，或在 0.3.0 预编译包根目录，生成接入包：
 
 ```powershell
-node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeGraph接入包"
+node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeTrail接入包"
 ```
 
-按 [接入说明](docs/Agent接入说明.md) 合并生成的 Codex 配置、安装两个 Skill，再通过 `$codegraph-understand` 或 `$codegraph-impact` 使用。生成器不会修改现有用户配置。宿主直接启动 stdio 服务，日常无需手动另开 CLI；加 `--workbench` 可提供同快照的本地证据页面。
+按 [接入说明](docs/Agent接入说明.md) 合并生成的 Codex 配置、安装两个 Skill，再通过 `$codetrail-understand` 或 `$codetrail-impact` 使用。生成器不会修改现有用户配置。宿主直接启动 stdio 服务，日常无需手动另开 CLI；加 `--workbench` 可提供同快照的本地证据页面。
 
-CodeGraph MCP 自身不调用模型；工具返回的源码片段会进入宿主上下文，其数据发送遵循宿主配置。
+CodeTrail MCP 自身不调用模型；工具返回的源码片段会进入宿主上下文，其数据发送遵循宿主配置。
 
 ## 本地运行
 
@@ -57,7 +59,7 @@ npm run open -- fixtures/reference-lab --port 4400 --no-browser
 npm run open -- fixtures/reference-lab --port 0 --data-dir artifacts/local-cache --no-browser
 ```
 
-`--port 0` 自动选择空闲端口；`--no-browser` 只输出链接；`--data-dir` 指定工具自己的缓存基目录。默认缓存位于 Windows 用户的 `%LOCALAPPDATA%/CodeGraph/cache`，按项目路径隔离，保留最近三份不同内容的快照。缓存包含所分析文件的完整源码。浏览器只能分析 CLI 已选择的目录，不能通过 API 切换到任意路径。
+`--port 0` 自动选择空闲端口；`--no-browser` 只输出链接；`--data-dir` 指定工具自己的缓存基目录。默认缓存位于 Windows 用户的 `%LOCALAPPDATA%/CodeTrail/cache`，按项目路径隔离，保留最近三份不同内容的快照。缓存包含所分析文件的完整源码。浏览器只能分析 CLI 已选择的目录，不能通过 API 切换到任意路径。
 
 工作台操作：
 
@@ -78,11 +80,11 @@ npm run open -- fixtures/reference-lab --port 0 --data-dir artifacts/local-cache
 
 ```powershell
 $env:OPENAI_API_KEY = "替换为你的 API Key"
-$env:CODEGRAPH_OPENAI_MODEL = "替换为支持 Responses 结构化输出的模型 ID"
+$env:CODETRAIL_OPENAI_MODEL = "替换为支持 Responses 结构化输出的模型 ID"
 npm run open -- fixtures/reference-lab
 ```
 
-模型需在你的账户中可用，并支持 Responses API 的 JSON Schema 结构化输出。首版要求明确设置模型，不预选可能退役或不可用的模型。也可使用 `CODEGRAPH_OPENAI_API_KEY`，其优先级高于 `OPENAI_API_KEY`。程序直接读取进程环境变量，不自动加载 `.env`。
+模型需在你的账户中可用，并支持 Responses API 的 JSON Schema 结构化输出。首版要求明确设置模型，不预选可能退役或不可用的模型。也可使用 `CODETRAIL_OPENAI_API_KEY`，其优先级高于 `OPENAI_API_KEY`。程序直接读取进程环境变量，不自动加载 `.env`。
 
 在节点的“解释”页启用本项目的按需 AI，核对文件清单和展开的源码片段，再点击“发送以上片段并用 AI 解释”。每次服务启动默认关闭 AI；配置、启用、搜索和阅读操作本身均不会发起模型请求。密钥由本地服务读取，浏览器不输入、不保存密钥。
 
@@ -92,7 +94,7 @@ npm run open -- fixtures/reference-lab
 
 AI 结果按快照、上下文、问题、阅读密度、模型、端点及提示版本缓存在本机 SQLite 中。同一上下文可复用；“有误”反馈会移除该条缓存，“清除本项目的 AI 解释缓存”可删除解释结果。缓存含源码片段和模型输出。
 
-可选的 `CODEGRAPH_OPENAI_REASONING_EFFORT` 支持 `minimal/low/medium/high`，仅在所选模型支持对应值时设置。`CODEGRAPH_OPENAI_BASE_URL` 可覆盖服务端地址，必须使用 HTTPS；环回 HTTP 仅用于受控本地测试。接口格式依据 [OpenAI Structured Outputs 官方指南](https://developers.openai.com/api/docs/guides/structured-outputs)。
+可选的 `CODETRAIL_OPENAI_REASONING_EFFORT` 支持 `minimal/low/medium/high`，仅在所选模型支持对应值时设置。`CODETRAIL_OPENAI_BASE_URL` 可覆盖服务端地址，必须使用 HTTPS；环回 HTTP 仅用于受控本地测试。接口格式依据 [OpenAI Structured Outputs 官方指南](https://developers.openai.com/api/docs/guides/structured-outputs)。
 
 ## Git 改动影响
 
@@ -150,7 +152,7 @@ npm run verify:release
 
 AI 自动测试使用环回地址上的模拟 Responses 服务和虚拟密钥，不访问真实 OpenAI，即使运行环境已有模型凭证。当前未进行真实模型调用或解释语义质量评测。
 
-浏览器测试配置位于 `playwright.config.mjs`，可用 `CODEGRAPH_BROWSER_CHANNEL` 切换已安装的浏览器渠道，例如 `msedge`。测试不会自动下载浏览器。
+浏览器测试配置位于 `playwright.config.mjs`，可用 `CODETRAIL_BROWSER_CHANNEL` 切换已安装的浏览器渠道，例如 `msedge`。测试不会自动下载浏览器。
 
 验证产物保存在 `artifacts/`，默认不纳入版本控制：
 
@@ -208,8 +210,8 @@ docs/                      MVP 方案与阶段记录
 
 ## 分析边界
 
-- 只扫描选定目录中有效 UTF-8 的 `.ts`、`.tsx`、`.js`、`.jsx`，保留 BOM；非法编码明确跳过。tsconfig 或 jsconfig 提供编译选项；其 `files/include/exclude` 不扩大或缩小原型扫描范围。使用 `.codegraphignore` 指定实际范围。
-- 读取选定根目录及其子目录内的 `.gitignore`，另合并根目录 `.codegraphignore`。不继承选定目录之外的忽略配置。
+- 只扫描选定目录中有效 UTF-8 的 `.ts`、`.tsx`、`.js`、`.jsx`，保留 BOM；非法编码明确跳过。tsconfig 或 jsconfig 提供编译选项；其 `files/include/exclude` 不扩大或缩小原型扫描范围。使用 `.codetrailignore` 指定实际范围。
+- 读取选定根目录及其子目录内的 `.gitignore`，另合并根目录 `.codetrailignore`。不继承选定目录之外的忽略配置。
 - 强制排除依赖、构建目录和密钥环境文件；源码目录链接不参与扫描。允许读取所选根目录内的依赖声明，包括链接目标仍在根目录内的依赖；工具自身 TypeScript 标准库也可用于类型分析。
 - 所选根目录之外的配置继承和依赖声明不读取，缺失内容会返回诊断。分析子项目时，不会隐式扩大到父目录或整个仓库。
 - 原型使用一个编译上下文，不遍历 TypeScript 项目引用，不执行 Vite 配置，也不保证复杂 monorepo 的完整关系。普通静态调用不代表运行时必然执行，虚方法解析也不能替代运行时分发分析。

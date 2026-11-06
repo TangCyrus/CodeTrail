@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { analyzeProject } from "@codegraph/analyzer";
-import type { AnalyzeRequest, CapturedSource } from "@codegraph/shared";
+import { analyzeProject } from "@codetrail/analyzer";
+import type { AnalyzeRequest, CapturedSource } from "@codetrail/shared";
 
 let sources: CapturedSource[] = [];
 try {

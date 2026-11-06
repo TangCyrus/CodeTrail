@@ -1,6 +1,8 @@
-# Agent 接入说明（0.2.0）
+# Agent 接入说明（0.3.0）
 
-CodeGraph 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 查询架构、阅读顺序、符号关系、源码证据及 Git 改动影响。浏览器工作台仍可独立运行，也可以与 MCP 共用快照。
+CodeTrail 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 查询架构、阅读顺序、符号关系、源码证据及 Git 改动影响。浏览器工作台仍可独立运行，也可以与 MCP 共用快照。
+
+从 0.2.0 及以前版本升级，请先阅读 [命名迁移说明](命名迁移说明.md)，更新 MCP 名称、Skill 与相关环境变量。
 
 首个完成协议和核心流程验收的宿主是 **Codex CLI 0.166.0-alpha.6 的 app-server**，运行环境为 Windows 11 / Node.js 24.20.0。尚未实际验收其他宿主、操作系统或模型自主选工具的效果。
 
@@ -11,47 +13,47 @@ CodeGraph 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 
 - 已安装的 Codex。MCP 服务本身不需要 OpenAI API 密钥，不会调用模型。
 - 目标代码目前支持 `.ts`、`.tsx`、`.js`、`.jsx`，继承 MVP 的解析范围和限制。
 
-源码版本先在 CodeGraph 目录执行：
+源码版本先在 CodeTrail 目录执行：
 
 ```powershell
 npm ci --ignore-scripts
 npm run build
 ```
 
-预编译 **0.2.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
+预编译 **0.3.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
 
 ## 生成接入包
 
-在 CodeGraph 源码或预编译包根目录执行，替换两个路径：
+在 CodeTrail 源码或预编译包根目录执行，替换两个路径：
 
 ```powershell
-node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeGraph接入包"
+node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeTrail接入包"
 ```
 
 输出目录必须尚不存在，避免覆盖已有配置。接入包包含：
 
 - `config.toml`：使用当前 Node 和已构建服务的绝对路径，将一个项目固定为分析根目录。
-- `skills/codegraph-understand/`：理解架构、定位关键代码和推荐阅读顺序。
-- `skills/codegraph-impact/`：修改前理解关联、修改后核实 HEAD 影响与旧新证据。
+- `skills/codetrail-understand/`：理解架构、定位关键代码和推荐阅读顺序。
+- `skills/codetrail-impact/`：修改前理解关联、修改后核实 HEAD 影响与旧新证据。
 - `README.txt`：安装提示。首次查询后还会生成 `cache/`。
 
-生成动作不会修改用户的 Codex 配置，也不会往被分析项目写入文件。移动 CodeGraph 安装目录、目标项目或接入包后，应重新生成并更新配置中的绝对路径。
+生成动作不会修改用户的 Codex 配置，也不会往被分析项目写入文件。移动 CodeTrail 安装目录、目标项目或接入包后，应重新生成并更新配置中的绝对路径。
 
 ## 接入 Codex
 
-1. 将生成的 `config.toml` 内容合并到 Codex 用户配置 `~/.codex/config.toml`，或可信项目的 `.codex/config.toml`。已有同名 `codegraph` 服务时先核对，勿重复同名 TOML 表。
-2. 将接入包中的两个 Skill 文件夹复制到目标项目的 `.agents/skills/`；目录结构应是 `.agents/skills/codegraph-understand/SKILL.md` 和 `.agents/skills/codegraph-impact/SKILL.md`。已有同名 Skill 时先比较内容。
-3. 重新加载或重启宿主，在 MCP 状态中确认 `codegraph` 已连接并列出六个工具。Codex CLI 可用 `codex mcp list` 检查配置，在交互界面使用 `/mcp` 检查连接。
+1. 将生成的 `config.toml` 内容合并到 Codex 用户配置 `~/.codex/config.toml`，或可信项目的 `.codex/config.toml`。已有同名 `codetrail` 服务时先核对，勿重复同名 TOML 表。
+2. 将接入包中的两个 Skill 文件夹复制到目标项目的 `.agents/skills/`；目录结构应是 `.agents/skills/codetrail-understand/SKILL.md` 和 `.agents/skills/codetrail-impact/SKILL.md`。已有同名 Skill 时先比较内容。
+3. 重新加载或重启宿主，在 MCP 状态中确认 `codetrail` 已连接并列出六个工具。Codex CLI 可用 `codex mcp list` 检查配置，在交互界面使用 `/mcp` 检查连接。
 4. 在目标项目中开始新会话，通过下面两个任务检查接入。
 
-宿主负责启动配置中的 stdio 进程，日常不必先手动启动 CodeGraph 或浏览器。项目配置是否加载仍受宿主的工作区信任与组织策略影响。
+宿主负责启动配置中的 stdio 进程，日常不必先手动启动 CodeTrail 或浏览器。项目配置是否加载仍受宿主的工作区信任与组织策略影响。
 
 配置模板如下；实际路径以生成文件为准，Windows 路径在 TOML 字符串中需正确转义：
 
 ```toml
-[mcp_servers.codegraph]
+[mcp_servers.codetrail]
 command = "D:/tools/node/node.exe"
-args = ["D:/tools/codegraph/apps/local/dist/cli.js", "mcp", "D:/your-project", "--data-dir", "D:/CodeGraph-kit/cache"]
+args = ["D:/tools/codetrail/apps/local/dist/cli.js", "mcp", "D:/your-project", "--data-dir", "D:/CodeTrail-kit/cache"]
 startup_timeout_sec = 20
 tool_timeout_sec = 90
 ```
@@ -65,7 +67,7 @@ tool_timeout_sec = 90
 理解项目：
 
 ```text
-使用 $codegraph-understand，帮我理解这个项目：先说明入口和模块关系，
+使用 $codetrail-understand，帮我理解这个项目：先说明入口和模块关系，
 推荐从哪里开始阅读，并为关键判断提供源码位置。
 ```
 
@@ -74,7 +76,7 @@ tool_timeout_sec = 90
 核实已有改动：
 
 ```text
-使用 $codegraph-impact，检查当前工作区相对 HEAD 的修改，
+使用 $codetrail-impact，检查当前工作区相对 HEAD 的修改，
 说明可能关联的调用方和测试位置，用旧版或新版源码证明关键路径。
 ```
 
@@ -104,7 +106,7 @@ tool_timeout_sec = 90
 生成接入包时加 `--workbench`：
 
 ```powershell
-node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeGraph接入包带界面" --workbench
+node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeTrail接入包带界面" --workbench
 ```
 
 工具返回 `workbenchUrl`，浏览器打开即可看到同一 MCP 进程的快照和 Git 比较。地址绑定 `127.0.0.1` 的随机端口，需要完整会话链接，不自动打开浏览器。服务退出后链接失效。
@@ -113,9 +115,9 @@ node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeGraph接入包带�
 
 ## 数据与权限
 
-CodeGraph 不执行目标项目代码，不修改源码或 Git 索引，只在配置的缓存目录保存分析结果和纳入分析的源码。缓存按项目隔离，普通快照与比较各保留最近三份；被清理的 ID 返回错误，不能自动替换为新版。
+CodeTrail 不执行目标项目代码，不修改源码或 Git 索引，只在配置的缓存目录保存分析结果和纳入分析的源码。缓存按项目隔离，普通快照与比较各保留最近三份；被清理的 ID 返回错误，不能自动替换为新版。
 
-**本地解析不等于源码永不离开本机。** MCP 返回的源码片段会进入 Agent 宿主的上下文，是否发送到远程模型取决于宿主配置和任务。CodeGraph 自身不调用模型，不代表宿主离线运行。不要将工作台会话链接、缓存或工具完整输出公开分享。
+**本地解析不等于源码永不离开本机。** MCP 返回的源码片段会进入 Agent 宿主的上下文，是否发送到远程模型取决于宿主配置和任务。CodeTrail 自身不调用模型，不代表宿主离线运行。不要将工作台会话链接、缓存或工具完整输出公开分享。
 
 源码、注释、名称、路径都作为不可信数据返回。Skill 要求忽略其中夹带的指令，并区分静态事实、启发式规则、业务推断和运行验证。Skill 不赋予额外的执行、修改、网络或发送权限。
 
@@ -128,7 +130,7 @@ CodeGraph 不执行目标项目代码，不修改源码或 Git 索引，只在�
 - 缓存无法打开：换一个新的 `--data-dir`，旧缓存不会自动删除。先停服务再处理旧缓存。
 - 请求超时或取消：上次结果保留，可缩小项目或重试。宿主超时建议大于服务的 60 秒。
 - 路径包含中文或空格：使用生成器提供的绝对路径和正确引号，不通过额外 shell 拼接命令。
-- 卸载：从宿主移除 `codegraph` MCP 配置及复制的两个 Skill，停止相关服务，再删除专用接入包和缓存目录。保留被分析项目的源码及 Git 数据。
+- 卸载：从宿主移除 `codetrail` MCP 配置及复制的两个 Skill，停止相关服务，再删除专用接入包和缓存目录。保留被分析项目的源码及 Git 数据。
 
 ## 开发与验收
 
@@ -138,6 +140,6 @@ npm run validate:codex
 npm run check
 ```
 
-`validate:codex` 使用本机 Codex app-server、隔离的配置目录与自有 Git 演示项目，实际发现 Skill 和工具并通过宿主发起工具调用；不修改用户配置、不加载用户凭据、不启动模型生成。若 Codex 不在 PATH，可通过 `CODEGRAPH_CODEX_EXE` 指定可执行文件。
+`validate:codex` 使用本机 Codex app-server、隔离的配置目录与自有 Git 演示项目，实际发现 Skill 和工具并通过宿主发起工具调用；不修改用户配置、不加载用户凭据、不启动模型生成。若 Codex 不在 PATH，可通过 `CODETRAIL_CODEX_EXE` 指定可执行文件。
 
 它验证宿主接入和工具链路，**没有验证模型是否自主选择合适的工具、抵抗注入指令，或准确解释业务**。相关人工任务试用仍待开展。验收明细见 [第六阶段验证记录](第六阶段验证记录.md)。

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ComparisonSourceTarget, ComparisonSourceWindow } from "@codegraph/shared";
+import type { ComparisonSourceTarget, ComparisonSourceWindow } from "@codetrail/shared";
 import { api, ignoredAbort, messageOf } from "./api.js";
 import { CodeLines } from "./Inspector.js";
 import { Icon, InlineError, LoadingRows } from "./ui.js";

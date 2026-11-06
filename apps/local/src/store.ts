@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { assertSnapshotIntegrity, type AnalysisSnapshot, type CapturedSource, type CodeExplanation, type ExplorerNode, type ReadingList } from "@codegraph/shared";
-import type { ProjectExplorer } from "@codegraph/graph";
-import type { ComparisonBundle } from "@codegraph/shared";
+import { assertSnapshotIntegrity, type AnalysisSnapshot, type CapturedSource, type CodeExplanation, type ExplorerNode, type ReadingList } from "@codetrail/shared";
+import type { ProjectExplorer } from "@codetrail/graph";
+import type { ComparisonBundle } from "@codetrail/shared";
 
 const sha = (value: string): string => createHash("sha256").update(value).digest("hex");
 
