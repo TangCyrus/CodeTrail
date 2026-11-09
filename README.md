@@ -154,7 +154,7 @@ npm run release
 npm run verify:release
 ```
 
-`npm run check` 编译前后端、运行 109 项 Node 测试，并验证人工标注样例。`npm run test:browser` 使用已安装的 Google Chrome 运行 20 条流程，覆盖架构、阅读、AI/Git、三个代表项目、100 节点交互、布局超时/失败与源码重试；执行前先完成构建。`npm run validate:monorepo` 用本项目验证真实跨包调用与源码证据。也可分别执行 `npm test`、`npm run validate:fixtures`、`npm run validate:acceptance`。
+`npm run check` 编译前后端、运行 143 项 Node 测试，并验证人工标注样例。`npm run test:browser` 使用已安装的 Google Chrome 运行 24 条流程，覆盖架构、阅读、AI/Git、三个代表项目、100 节点交互、布局超时/失败与源码重试；执行前先完成构建。`npm run validate:monorepo` 用本项目验证真实跨包调用与源码证据。也可分别执行 `npm test`、`npm run validate:fixtures`、`npm run validate:acceptance`。
 
 `npm run benchmark` 在新进程中重复测量三个样例、100/500 文件合成项目和工具自身，另测 Git 双图比较；不执行目标代码，不清空操作系统文件缓存。原始样本、硬件、输入快照和预算结论保存到 `artifacts/phase-five/performance.json`。既有基准（本次解析器变更前）中，本机 500 文件/12,977 行的三次首次解析约 1.97–2.09 秒，缓存搜索/两跳查询 p95 约 16 毫秒；完整 Git 比较约 19.6–25.2 秒，不能把这些数值当作新版或所有 500 文件项目的保证。0.4.0 自分析的时间成本见 [monorepo 验证记录](docs/monorepo解析验证记录.md)。
 
@@ -243,4 +243,6 @@ docs/                      MVP 方案与阶段记录
 
 工作台使用 Fastify、React、React Flow 和 ELK，版本固定在 package.json 与锁文件中。Node 自带 SQLite 用于本地持久化，无需安装数据库服务。
 
-项目需求见 [MVP 需求与技术方案](docs/MVP需求与技术方案.md)，阶段结果见 [第一阶段](docs/第一阶段验证记录.md)、[第二阶段](docs/第二阶段验证记录.md)、[第三阶段](docs/第三阶段验证记录.md)、[第四阶段](docs/第四阶段验证记录.md)、[第五阶段](docs/第五阶段验证记录.md)，界面约定见 [设计说明](DESIGN.md)。真人试用任务、CSV 记录模板及固定 AI 评测问题已准备，当前没有填入用户反馈或真实模型评分。
+项目需求见 [MVP 需求与技术方案](docs/MVP需求与技术方案.md)，阶段结果见 [第一阶段](docs/第一阶段验证记录.md)、[第二阶段](docs/第二阶段验证记录.md)、[第三阶段](docs/第三阶段验证记录.md)、[第四阶段](docs/第四阶段验证记录.md)、[第五阶段](docs/第五阶段验证记录.md)，界面约定见 [设计说明](DESIGN.md)。
+
+小范围试用从[组织方案](docs/用户试用方案.md)开始，参与者使用[三个任务卡](docs/试用任务卡.md)与[反馈模板](docs/用户试用反馈模板.md)，主持人使用[验收与评分标准](docs/试用验收标准.md)。`npm run validate:trial` 通过实际 MCP 预跑 CodeTrail 与固定 TanStack Store 的理解、定位和改动影响流程（需先准备外部克隆及声明环境，见[外部项目验收](docs/外部monorepo验收记录.md)）；可加 `-- --project self` 或 `-- --project tanstack`。结果见[预跑记录](docs/试用预跑记录.md)。这是无模型、无真人的工程检查，当前尚无用户反馈或真实模型评分。

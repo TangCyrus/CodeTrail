@@ -35,7 +35,8 @@
     "validate:monorepo": "npm run build:server && node scripts/validate-monorepo.mjs",
     "validate:external": "npm run build:server && node scripts/validate-external-monorepo.mjs",
     "prepare:external-deps": "node scripts/prepare-external-dependencies.mjs",
-    "validate:baseline": "npm run build:server && node scripts/validate-baseline-dependencies.mjs"
+    "validate:baseline": "npm run build:server && node scripts/validate-baseline-dependencies.mjs",
+    "validate:trial": "npm run build:server && node scripts/validate-user-trial.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",
