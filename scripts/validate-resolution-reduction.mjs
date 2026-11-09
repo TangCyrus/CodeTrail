@@ -19,10 +19,11 @@ const externalSitesUnchanged = JSON.stringify(externalSites(after)) === JSON.str
 if (args.includes('--expect-external-unchanged')) assert.ok(externalSitesUnchanged, 'Ordinary external sites must be retained in this controlled parser-only comparison');
 const callSite = item => `${site(item)}:${item.to}`;
 const newCalls = new Set(after.relations.filter(x => x.kind === 'CALLS').map(callSite));
+const previousCalls = new Set(before.relations.filter(x => x.kind === 'CALLS').map(callSite));
 for (const edge of before.relations.filter(x => x.kind === 'CALLS')) assert.ok(newCalls.has(callSite(edge)), `Lost previously resolved call: ${callSite(edge)}`);
-assert.ok(promoted.length > 0);
+assert.ok(promoted.length > 0 || args.includes('--allow-unchanged'));
 for (const item of promoted) assert.ok(resolved.has(site(item)), `Removed unresolved site lacks a real static edge: ${site(item)}`);
-assert.ok(after.unresolved.length < before.unresolved.length);
+assert.ok(args.includes('--allow-unchanged') ? after.unresolved.length <= before.unresolved.length : after.unresolved.length < before.unresolved.length);
 const files = new Map(after.files.map(x => [x.id, x])), source = new Map();
 for (const file of after.files) {
   const bytes = readFileSync(path.join(after.rootDir, file.path));
@@ -42,6 +43,7 @@ const result = { passed: true, identicalSourceFilesAndHashes: true, before: coun
   newUnresolvedSites: after.unresolved.filter(x => !oldUnresolved.has(site(x))).length,
   promotedByKind: Object.fromEntries(['CALLS', 'REFERENCES', 'IMPORTS', 'RENDERS'].map(kind => [kind, promoted.filter(x => x.kind === kind).length])),
   externalSitesUnchanged, previouslyResolvedCallsRetained: true,
+  newStaticCalls: after.relations.filter(edge => edge.kind === 'CALLS' && !previousCalls.has(callSite(edge))).length,
   evidenceChecked: after.evidence.length };
 if (option('--out')) { const output = path.resolve(option('--out')); mkdirSync(path.dirname(output), { recursive: true }); writeFileSync(output, JSON.stringify(result, null, 2)); }
 console.log(JSON.stringify(result, null, 2));

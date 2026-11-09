@@ -45,7 +45,7 @@ function request(method, params) {
 }
 let result;
 try {
-  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.7.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
+  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.8.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
   child.stdin.write(JSON.stringify({ method: "initialized", params: {} }) + "\n");
   const skills = await request("skills/list", { cwds: [project], forceReload: true });
   writeFileSync(path.join(run, "skills-discovery.json"), JSON.stringify(skills, null, 2));
@@ -108,6 +108,9 @@ try {
   await Promise.race([exited, delay(4000)]);
   if (child.exitCode === null) child.kill();
   for (const item of pending.values()) { clearTimeout(item.timer); item.reject(Error("Host stopped")); } pending.clear();
+  // The host's MCP descendants can briefly retain inherited pipe handles on
+  // Windows. The probe is finished; release our readers instead of hanging.
+  lines.close(); child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
   writeFileSync(path.join(run, "host-stderr.txt"), stderr);
   writeFileSync(path.join(parent, "codex-acceptance.json"), JSON.stringify(result, null, 2));
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");

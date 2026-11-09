@@ -19,14 +19,14 @@ const git = (parameters) => execFileSync('git', ['--no-optional-locks', '-c', 'c
 assert.equal(git(['rev-parse', 'HEAD']).trim(), revision, 'Use the pinned TanStack Store revision');
 assert.ok(!/^(?:filter\.|include(?:if\..*)?\.)/im.test(git(['config', '--local', '--no-includes', '--list'])), 'Use a disposable clone without executable filters or included Git configuration');
 assert.equal(git(['status', '--porcelain=v1', '-z']), '', 'Acceptance requires a clean, disposable checkout');
-const core = args.includes('--core'), dispatch = args.includes('--dispatch');
-const targetName = dispatch ? 'createStoreContext.useStoreContext' : core ? 'createReactiveSystem.link' : 'shallow';
-const targetPath = dispatch ? 'packages/preact-store/src/createStoreContext.tsx' : core ? 'packages/store/src/alien.ts' : 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
+const core = args.includes('--core'), dispatch = args.includes('--dispatch'), receivers = args.includes('--receivers');
+const targetName = receivers ? 'effectScopeOper' : dispatch ? 'createStoreContext.useStoreContext' : core ? 'createReactiveSystem.link' : 'shallow';
+const targetPath = receivers ? 'packages/store/src/signal.ts' : dispatch ? 'packages/preact-store/src/createStoreContext.tsx' : core ? 'packages/store/src/alien.ts' : 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
 const workspaceFile = path.join(project, 'pnpm-workspace.yaml'), workspace = readFileSync(workspaceFile);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.7.0' });
+const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.8.0' });
 const calls = [], proofs = [];
-let overview, comparison, reading, snapshot, result, retainedGap;
+let overview, comparison, reading, snapshot, result, retainedGap, nestedCanary;
 async function call(name, parameters) {
   const started = performance.now();
   const response = await client.callTool({ name, arguments: parameters }, { timeout: 90000 });
@@ -55,7 +55,7 @@ try {
     assert.equal(source.matchesCurrentFile, true); assert.equal(source.fileHash, sha(readFileSync(path.join(project, file))));
   }
   reading = await call('recommend_reading', pin); assert.ok(reading.readingOrder.length > 0);
-  if (dispatch) {
+  if (dispatch || receivers) {
     const found = await call('search_symbols', {...pin, query:'createAtom.atom.subscribe.e', limit:20});
     const owner = found.results.find(item=>item.path==='packages/store/src/atom.ts' && item.kind==='function'); assert.ok(owner);
     const context = await call('symbol_context', {...pin,nodeId:owner.id,maxNodes:6});
@@ -74,8 +74,10 @@ try {
     assert.equal((await call('project_overview', {})).stale, true);
   } finally { writeFileSync(workspaceFile, workspace); }
   assert.equal((await call('project_overview', {})).stale, false);
-  const beforeText = dispatch ? 'return value' : core ? 'const prevDep = sub.depsTail' : 'if (Object.is(objA, objB)) {';
-  const afterText = dispatch ? 'return (value)' : core ? 'const prevDep = (sub.depsTail)' : 'if (objA === objB) {';
+  const beforeText = receivers ? 'this.depsTail = undefined\n  this.flags = NONE' : dispatch ? 'return value' : core ? 'const prevDep = sub.depsTail' : 'if (Object.is(objA, objB)) {';
+  const afterText = receivers ? `const cleanup = { state: { node: this, reset(): void { this.clearFlags() }, clearFlags(): void { this.node.depsTail = undefined; this.node.flags = NONE } } }
+  const stateAlias = cleanup.state
+  stateAlias.reset()` : dispatch ? 'return (value)' : core ? 'const prevDep = (sub.depsTail)' : 'if (objA === objB) {';
   assert.ok(original.toString('utf8').includes(beforeText));
   writeFileSync(targetFile, original.toString('utf8').replace(beforeText, afterText));
   comparison = await call('compare_worktree', { refresh: true, limit: 2 });
@@ -93,10 +95,10 @@ try {
   assert.equal(new Set(routes.map(x => x.id)).size, comparison.totals.paths);
   for (const side of ['base', 'current']) {
     const route = routes.find(x => x.side === side && x.seed.name === targetName
-      && (dispatch ? x.distance === 1 && /^packages\/preact-store\/tests\//.test(x.target.path) : core ? /^packages\/store\/src\/(atom|signal)\.ts$/.test(x.target.path) : /^packages\/(react|preact)-store\/tests\//.test(x.target.path)) && x.steps.some(step => step.kind === 'CALLS'));
+      && (receivers ? x.distance === 1 && x.target.path === targetPath && x.target.name === 'effectOper' : dispatch ? x.distance === 1 && /^packages\/preact-store\/tests\//.test(x.target.path) : core ? /^packages\/store\/src\/(atom|signal)\.ts$/.test(x.target.path) : /^packages\/(react|preact)-store\/tests\//.test(x.target.path)) && x.steps.some(step => step.kind === 'CALLS'));
     assert.ok(route, `Missing source-backed cross-package ${side} test caller`);
     for (const step of route.steps) {
-      if ((core || dispatch) && step.kind === 'CALLS') assert.ok(step.supportingEvidenceIds?.length, 'Core recovered call must retain value-origin proofs');
+      if ((core || dispatch || receivers) && step.kind === 'CALLS') assert.ok(step.supportingEvidenceIds?.length, 'Core recovered call must retain value-origin proofs');
       for (const evidenceId of step.supportingEvidenceIds ?? []) {
         const support = await call('read_evidence', {comparisonId: comparison.comparisonId, side, evidenceId, maxLines: 8});
         assert.equal(support.snapshotId, comparison.snapshotIds[side]);
@@ -105,17 +107,47 @@ try {
       }
       const evidence = await call('read_evidence', { comparisonId: comparison.comparisonId, side, evidenceId: step.evidenceId, maxLines: 12 });
       assert.equal(evidence.snapshotId, comparison.snapshotIds[side]); assert.equal(evidence.filePath, step.from.path);
-      assert.equal(evidence.fileHash, sha(readFileSync(path.join(project, step.from.path))));
+      assert.equal(evidence.fileHash, sha(side === 'base' && step.from.path === targetPath ? original : readFileSync(path.join(project, step.from.path))));
       const proof = evidence.evidence.find(x => x.id === step.evidenceId); assert.ok(proof);
-      const text = readFileSync(path.join(project, step.from.path), 'utf8');
+      const text = side === 'base' && step.from.path === targetPath ? original.toString('utf8') : readFileSync(path.join(project, step.from.path), 'utf8');
       assert.equal(text.slice(proof.range.startOffset, proof.range.endOffset), proof.excerpt);
       proofs.push({ side, snapshotId: evidence.snapshotId, filePath: evidence.filePath, fileHash: evidence.fileHash, range: proof.range, excerpt: proof.excerpt, kind: step.kind });
     }
-    const mapping = core || dispatch ? {oldNode: routes.find(x => x.side === 'base' && x.seed.name === targetName).seed, newNode: routes.find(x => x.side === 'current' && x.seed.name === targetName).seed} : change.symbols.find(x => x.oldNode?.name === 'shallow' && x.newNode?.name === 'shallow'); assert.ok(mapping);
-    const source = await call('read_evidence', { comparisonId: comparison.comparisonId, side, nodeId: mapping[side === 'base' ? 'oldNode' : 'newNode'].id, maxLines: core || dispatch ? 20 : 8 });
+    const mapping = core || dispatch || receivers ? {oldNode: routes.find(x => x.side === 'base' && x.seed.name === targetName).seed, newNode: routes.find(x => x.side === 'current' && x.seed.name === targetName).seed} : change.symbols.find(x => x.oldNode?.name === 'shallow' && x.newNode?.name === 'shallow'); assert.ok(mapping);
+    const source = await call('read_evidence', { comparisonId: comparison.comparisonId, side, nodeId: mapping[side === 'base' ? 'oldNode' : 'newNode'].id, maxLines: receivers ? 60 : core || dispatch ? 20 : 8 });
     assert.equal(source.snapshotId, comparison.snapshotIds[side]); assert.equal(source.fileHash, sha(side === 'base' ? original : readFileSync(targetFile)));
     assert.equal(source.matchesCurrentFile, side === 'current');
-    assert.ok(source.lines.some(x => x.text.includes(side === 'base' ? beforeText : afterText)));
+    assert.ok(source.lines.some(x => x.text.includes(receivers ? side === 'base' ? 'this.flags = NONE' : 'this.clearFlags()' : side === 'base' ? beforeText : afterText)));
+  }
+  if (receivers) {
+    let route = routes.find(item=>item.side==='current' && item.seed.name.endsWith('.cleanup.clearFlags') && item.target.name==='effectScopeOper' && item.distance===2 && item.steps.every(step=>step.kind==='CALLS'));
+    let source = 'compare_worktree';
+    // The impact list is bounded at 100 paths; paging does not remove that cap.
+    // If a new seed was omitted, inspect the preserved same-side graph explicitly,
+    // then verify its source through MCP. Do not claim the path was in the list.
+    if (!route && comparison.truncated) {
+      const store = new SnapshotStore(path.join(run,'cache'),project);
+      try {
+        const captured = store.comparison(comparison.comparisonId)?.current.snapshot; assert.ok(captured);
+        assert.equal(captured.id,comparison.snapshotIds.current);
+        const symbols = new Map(captured.symbols.map(symbol=>[symbol.id,symbol.qualifiedName]));
+        const calls = captured.relations.filter(edge=>edge.kind==='CALLS' && edge.origin==='static');
+        const first = calls.find(edge=>symbols.get(edge.from)==='effectScopeOper.cleanup.reset' && symbols.get(edge.to)==='effectScopeOper.cleanup.clearFlags');
+        const second = first && calls.find(edge=>edge.to===first.from && symbols.get(edge.from)==='effectScopeOper');
+        if(first && second) route = {steps:[first,second]};
+        source = 'preserved-current-snapshot';
+      }finally{store.close();}
+    }
+    assert.ok(route,'Nested state alias and method this must form a same-side two-step path');
+    nestedCanary = {source,side:'current',snapshotId:comparison.snapshotIds.current,distance:2,impactListTruncated:comparison.truncated};
+    for(const step of route.steps){
+      for(const evidenceId of [step.evidenceId,...(step.supportingEvidenceIds??[])]){
+        const proof=await call('read_evidence',{comparisonId:comparison.comparisonId,side:'current',evidenceId,maxLines:8});
+        assert.equal(proof.snapshotId,comparison.snapshotIds.current);
+        assert.equal(proof.fileHash,sha(readFileSync(path.join(project,proof.filePath))));
+        proofs.push({side:'current',role:'nested-this-canary',snapshotId:proof.snapshotId,filePath:proof.filePath,fileHash:proof.fileHash,evidenceId});
+      }
+    }
   }
   // Inspect the exact MCP-produced snapshot rather than running a separate analyzer for statistics.
   const store = new SnapshotStore(path.join(run, 'cache'), project);
@@ -144,8 +176,8 @@ try {
     fixedCorpus = { identicalFilesAndHashes: true, before: before.statistics, after: snapshot.statistics,
       diagnostics: { before: before.diagnostics.length, after: snapshot.diagnostics.length } };
   }
-  result = { passed: true, repository: 'https://github.com/TanStack/store', revision, run, project, core, dispatch, modelCalls: 0,
-    snapshotId: overview.snapshotId, status: overview.status, statistics: overview.statistics, diagnostics: overview.totals.diagnostics, ...(retainedGap ? {retainedGap} : {}),
+  result = { passed: true, repository: 'https://github.com/TanStack/store', revision, run, project, core, dispatch, receivers, modelCalls: 0,
+    snapshotId: overview.snapshotId, status: overview.status, statistics: overview.statistics, diagnostics: overview.totals.diagnostics, ...(retainedGap ? {retainedGap} : {}), ...(nestedCanary ? {nestedCanary} : {}),
     reading: reading.readingOrder.map(x => ({ name: x.node.name, path: x.node.path })),
     comparison: { id: comparison.comparisonId, snapshotIds: comparison.snapshotIds, status: comparison.status, statistics: comparison.statistics,
       truncated: comparison.truncated, paths: routes.length, crossPackageProofs: proofs },

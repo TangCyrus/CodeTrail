@@ -1,12 +1,12 @@
 # CodeTrail MVP 安装与使用
 
-当前为本地试用版 0.7.0，验证平台为 Windows 11。需要 Node.js 24.x；源码安装另需 npm 11+，改动影响另需 Git。项目没有账号、云端服务或外部数据库要求。Agent 集成入口见 [Agent 接入说明](Agent接入说明.md)，本页主要介绍独立工作台。
+当前为本地试用版 0.8.0，验证平台为 Windows 11。需要 Node.js 24.x；源码安装另需 npm 11+，改动影响另需 Git。项目没有账号、云端服务或外部数据库要求。Agent 集成入口见 [Agent 接入说明](Agent接入说明.md)，本页主要介绍独立工作台。
 
 从旧版本升级须同步更新名称与配置，见 [0.3.0 迁移说明](命名迁移说明.md)。
 
 ## 使用预编译包
 
-将 `codetrail-mvp-0.7.0-win32-x64.zip` 完整解压到一个可写目录，保留 `apps`、`packages`、`node_modules`、`skills` 等目录结构。预编译包已包含所需生产依赖，不需要 npm 安装或构建。Node.js 和 Git 由本机提供。旧版 0.1.0 仍可独立浏览，但不提供 MCP。
+将 `codetrail-mvp-0.8.0-win32-x64.zip` 完整解压到一个可写目录，保留 `apps`、`packages`、`node_modules`、`skills` 等目录结构。预编译包已包含所需生产依赖，不需要 npm 安装或构建。Node.js 和 Git 由本机提供。旧版 0.1.0 仍可独立浏览，但不提供 MCP。
 
 在解压目录打开 PowerShell：
 

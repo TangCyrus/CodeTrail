@@ -8,8 +8,9 @@ import { hash, scanProject, slash, within } from "./scan.js";
 import { destructuredFactoryValue } from "./value-origins.js";
 import { summarizeResolution } from "@codetrail/shared";
 import { ObjectDispatchResolver, type DispatchFailure } from "./object-dispatch.js";
+import { BoundCallResolver } from "./bound-calls.js";
 
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }
@@ -254,7 +255,7 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
           const symbol = symbolAt(node);
           for (const declaration of symbol?.declarations ?? []) {
             const key = declarationKey(declaration);
-            if (!nativeDeclarations.has(key)) continue;
+            if (!nativeDeclarations.has(key) && !["bind", "prototype", "Function"].includes(symbol?.name ?? "")) continue;
             const references = uses.get(key);
             if (references) references.push(node); else uses.set(key, [node]);
           }
@@ -269,7 +270,9 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
     }
     const checkerByPath = new Map(compiler.files.map(entry => [path.resolve(entry.source.fileName), entry.checker]));
     const objectDispatch = new ObjectDispatchResolver({ key: declarationKey, native: node => nativeDeclarations.get(declarationKey(node)),
-      checker: node => checkerByPath.get(path.resolve(node.getSourceFile().fileName))!, uses });
+      checker: node => checkerByPath.get(path.resolve(node.getSourceFile().fileName))!, uses, written });
+    const boundCalls = new BoundCallResolver({ key: declarationKey, native: node => nativeDeclarations.get(declarationKey(node)),
+      checker: node => checkerByPath.get(path.resolve(node.getSourceFile().fileName))!, uses, written });
     for (const entry of registered) {
       const key = declarationKey(entry.node);
       byDeclaration.set(key, [...(byDeclaration.get(key) ?? []), entry]);
@@ -345,6 +348,13 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       let dispatchFailure: DispatchFailure | undefined;
       let dispatchVia: ts.Node[] | undefined;
       let rejectObjectTarget = false;
+      if (!candidates.some(candidate => candidate.callable) && (ts.isIdentifier(expression) || ts.isCallExpression(expression))) {
+        const bound = boundCalls.resolve(expression);
+        if (bound && "value" in bound) {
+          const target = byNode.get(bound.value) ?? byDeclaration.get(declarationKey(bound.value))?.[0];
+          if (target?.callable) { candidates = [target]; dispatchVia = bound.via; }
+        } else if (bound && "failure" in bound) dispatchFailure = bound.failure;
+      }
       if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
         const isObjectMethod = candidates.some(candidate => ts.isMethodDeclaration(candidate.node) && ts.isObjectLiteralExpression(candidate.node.parent));
         if (isObjectMethod || !candidates.some(candidate => candidate.callable) && missingReason(symbol) !== "external") {
@@ -372,6 +382,12 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
       else if (candidates.length > 1) addUnresolved("CALLS", from, node.expression, "ambiguous", candidates.map((entry) => entry.record.id));
       else if (candidates[0]?.callable) addEdge("CALLS", from, candidates[0].record.id, node.expression, undefined, dispatchVia ?? origin?.via);
       else addUnresolved("CALLS", from, node.expression, candidates.length ? "dynamic" : missingReason(symbol), candidates.map((entry) => entry.record.id), dispatchFailure);
+      // The external intrinsic API remains separately counted; its proven local forwarded body is an additional dependency.
+      const forwarded = boundCalls.forward(node);
+      if (forwarded && "value" in forwarded) {
+        const target = byNode.get(forwarded.value) ?? byDeclaration.get(declarationKey(forwarded.value))?.[0];
+        if (target?.callable) addEdge("CALLS", from, target.record.id, node.expression, undefined, forwarded.via);
+      }
       for (const argument of node.arguments) {
         const unwrapped = unwrap(argument);
         const argumentTargets = byNode.has(unwrapped) ? [byNode.get(unwrapped)!] : targets(symbolAt(unwrapped));
@@ -436,7 +452,8 @@ export class TypeScriptAnalyzer implements AnalyzerAdapter {
         "Static symbol relations are not runtime execution traces or complete data flow.",
         "Callback arguments are rule candidates, not proven callback execution.",
         "Value-origin calls require const object destructuring from a unique synchronous factory returning one literal object; defaults, rest, writes and alternative returns are not traced.",
-        "Object member value tracing requires a captured literal or fresh factory result with const aliases; member writes, unknown escapes, callbacks and unbound this retain explanatory gaps.",
+        "Object member tracing supports closed literal trees, const aliases and owned object-method this (including lexical arrows); writes, escapes, detached methods, shared children and unknown receivers retain explanatory gaps.",
+        "Private source functions reached through proven native bind/call/apply retain source provenance; creating a binding is not invocation, and binding an arrow does not replace lexical this. Constructors, reflection, proxies and out-of-scope intrinsic changes are not modeled.",
         "Dynamic dispatch, callable parameters and CommonJS require have no proven direct call edge; anonymous callbacks have their own lexical owner.",
         "Scope is the scanned TS/JS allowlist; bounded in-root project references supply per-project options without expanding the source scope.",
         "Workspace output-to-source redirects require unique compiler output paths; ambiguous configurations and package identities remain explicit gaps.",

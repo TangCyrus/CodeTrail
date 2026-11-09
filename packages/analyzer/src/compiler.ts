@@ -247,19 +247,32 @@ export function createCompiler(scan: ScanResult): CompilerContext {
       diagnostic("BUILD_ENTRY_UNSUPPORTED", "Build entry mapping requires a literal supported tsdown configuration and command; plugins, dynamic values and output overrides are not evaluated.", configFile);
     }
   }
+  // Alias/output metadata is now fixed for this analysis. Cache lexical path
+  // translation only; filesystem reads and scope validation keep their checks.
+  const physicalPaths = new Map<string, string>(), aliasDirectories = new Set<string>();
+  for (const alias of aliases.keys()) {
+    for (let directory = alias; within(scan.root, directory); directory = path.dirname(directory)) {
+      aliasDirectories.add(pathKey(directory));
+      if (directory === scan.root) break;
+    }
+  }
   function physical(name: string): string {
     const location = absolute(name);
-    for (const [alias, target] of aliases) if (within(alias, location)) return path.resolve(target, path.relative(alias, location));
-    return location;
+    const cached = physicalPaths.get(location);
+    if (cached !== undefined) return cached;
+    let result = location;
+    for (const [alias, target] of aliases) if (within(alias, location)) { result = path.resolve(target, path.relative(alias, location)); break; }
+    physicalPaths.set(location, result);
+    return result;
   }
-  const redirected = (name: string): string => outputSources.get(pathKey(physical(name))) ?? physical(name);
+  const redirected = (name: string): string => { const location = physical(name); return outputSources.get(pathKey(location)) ?? location; };
   const directoryCache = new Map<string, boolean>();
   const resolutionHost: ts.ModuleResolutionHost = {
     fileExists: (name) => readAllowed(redirected(name)) !== undefined,
     readFile: (name) => readAllowed(redirected(name)),
     directoryExists: (name) => {
       const location = physical(name);
-      if (outputDirectories.has(pathKey(location)) || within(scan.root, absolute(name)) && [...aliases.keys()].some((alias) => within(absolute(name), alias))) return true;
+      if (outputDirectories.has(pathKey(location)) || aliasDirectories.has(pathKey(name))) return true;
       const key = pathKey(location), cached = directoryCache.get(key);
       if (cached !== undefined) return cached;
       let directory = false;

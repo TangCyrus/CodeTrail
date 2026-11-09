@@ -73,13 +73,13 @@ test('conditional values, callbacks, getters, spreads, shared returns and unknow
     [`declare const callback:()=>void; const obj={run:callback};`, 'obj.run()', 'member-not-concrete'],
     [`const obj={get run(){return ()=>{}}};`, 'obj.run()', 'object-shape'],
     [`const obj={...{run(){}}};`, 'obj.run()', 'object-shape'],
-    [`const obj={run(){return this}};`, 'obj.run()', 'object-this'],
+    [`const obj={run(){return this}};`, 'obj.run()', 'receiver-escaped'],
     [`function actual(){return this}; const obj={run:actual};`, 'obj.run()', 'object-this'],
     [`const shared={run(){}}; function create(){return shared}; const obj=create();`, 'obj.run()', 'shared-return'],
     [`function create(flag:boolean){if(flag)return {run(){}};return {run(){}}};const obj=create(true);`, 'obj.run()', 'factory-returns'],
     [`async function create(){return {run(){}}};const obj=create() as any;`, 'obj.run()', 'factory-origin'],
     [`const obj={run(){}};declare const key:string;`, 'obj[key]()', 'computed-member'],
-    [`declare function unknown(value:unknown):void;const outer={inner:{run(){}}};const alias=outer.inner;unknown(alias);`, 'outer.inner.run()', 'receiver-nested'],
+    [`declare function unknown(value:unknown):void;const outer={inner:{run(){}}};const alias=outer.inner;unknown(alias);`, 'outer.inner.run()', 'nested-escaped'],
   ];
   for(const [setup,call,code] of cases){
     const s=tempProject(t,{'index.ts':`${setup} export function use(){${call}}`}).analyze();
