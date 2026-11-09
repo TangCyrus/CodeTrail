@@ -215,7 +215,7 @@ test("batch baseline capture preserves Unicode, CRLF, empty and repeated blobs; 
   const warnings = await materializeBaseline(info, destination.root);
   for (const [name, content] of Object.entries(contents)) {
     const file = path.join(destination.root, name);
-    if (Buffer.isBuffer(content) || name === '.env' || name === 'pnpm-lock.yaml') assert.equal(existsSync(file), false, name);
+    if (Buffer.isBuffer(content) || name === '.env') assert.equal(existsSync(file), false, name);
     else assert.equal(readFileSync(file, 'utf8'), content, name);
   }
   assert.ok(warnings.some(x => x.includes('2 个候选路径')));

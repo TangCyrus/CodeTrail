@@ -20,6 +20,7 @@ test.afterAll(async () => {
   if (temporary) { const target = path.resolve(temporary); if (!target.startsWith(path.resolve(artifacts) + path.sep)) throw Error("Unsafe cleanup"); rmSync(target, { recursive: true, force: true }); }
 });
 async function enter(page) {
+  await expect(page.locator(".snapshot-state")).toBeVisible();
   if (await page.getByRole("button", { name: "打开项目导航" }).isVisible()) await page.getByRole("button", { name: "打开项目导航" }).click();
   await page.getByRole("button", { name: "改动影响", exact: true }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: "改动影响" })).toBeVisible();

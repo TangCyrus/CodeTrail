@@ -45,7 +45,7 @@ function request(method, params) {
 }
 let result;
 try {
-  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.9.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
+  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.10.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
   child.stdin.write(JSON.stringify({ method: "initialized", params: {} }) + "\n");
   const skills = await request("skills/list", { cwds: [project], forceReload: true });
   writeFileSync(path.join(run, "skills-discovery.json"), JSON.stringify(skills, null, 2));
@@ -83,6 +83,8 @@ try {
   assert.ok(reading.readingOrder.length > 0);
   const comparison = await call("compare_worktree", { refresh: true, limit: 10 });
   assert.equal(comparison.baseline.state, "ready"); assert.equal(comparison.stale, false);
+  assert.equal(comparison.baselineDependencies.policy,"matched-local-declarations");
+  assert.ok(Number.isInteger(comparison.baselineDependencies.copiedFiles));
   const candidates = await call("compare_worktree", { comparisonId:comparison.comparisonId, symbolQuery:"amount", symbolSide:"current",limit:5 });
   const candidate = candidates.symbols.find(item=>item.node.name==="amount");assert.ok(candidate);
   const focused = await call("compare_worktree", { comparisonId:comparison.comparisonId, focus:{side:"current",nodeId:candidate.node.id},limit:5 });

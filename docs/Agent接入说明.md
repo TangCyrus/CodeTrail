@@ -1,4 +1,4 @@
-# Agent 接入说明（0.9.0）
+# Agent 接入说明（0.10.0）
 
 CodeTrail 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 查询架构、阅读顺序、符号关系、源码证据及 Git 改动影响。浏览器工作台仍可独立运行，也可以与 MCP 共用快照。
 
@@ -9,6 +9,10 @@ CodeTrail 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 
 首个完成协议和核心流程验收的宿主是 **Codex CLI 0.166.0-alpha.6 的 app-server**；0.9.0 另在 **0.167.0-alpha.3.2** 复验六个工具和两个 Skill，运行环境为 Windows 11 / Node.js 24.20.0。尚未实际验收其他宿主、操作系统或模型自主选工具的效果。
 
 ## 准备
+
+0.10.0 的 `compare_worktree` 增加 `baselineDependencies`，说明 HEAD 的辅助类型环境：policy、state、copiedFiles/copiedBytes/copiedPackages、skippedFiles、reasons、最多八个 skippedPackages 样例及 omittedSkippedPackages。state 为 available 只表示捕获集合通过核对，不表示历史依赖已完整还原；partial/unavailable/not-captured 需结合两侧 status 和诊断判断。旧快照可能没有这个字段。
+
+这只复制当前分析已读取、与两侧锁文件包身份匹配的本地声明及 JSON，不安装依赖、不执行目标脚本、不复制运行时实现。项目源码与证据仍按 comparisonId/base/current 隔离。包锁、声明和元数据在比较后变化会标记过期，已保存的旧源码证据仍可读取。环境来源和限制也出现在工作台“分析边界与未解析项”，详见 [HEAD 依赖环境验证](HEAD依赖环境验证记录.md)。
 
 0.9.0 增加正式的符号聚焦接口。升级已有安装后需让宿主重启/重载 MCP，并更新接入包中的 `codetrail-impact` Skill；正在运行的旧服务不会因源码构建而自动重载工具 schema。生成器仍不会覆盖现有用户配置。
 
@@ -40,7 +44,7 @@ npm ci --ignore-scripts
 npm run build
 ```
 
-预编译 **0.9.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
+预编译 **0.10.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
 
 ## 生成接入包
 

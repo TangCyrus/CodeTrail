@@ -24,9 +24,9 @@ const targetName = receivers ? 'effectScopeOper' : dispatch ? 'createStoreContex
 const targetPath = receivers ? 'packages/store/src/signal.ts' : dispatch ? 'packages/preact-store/src/createStoreContext.tsx' : core ? 'packages/store/src/alien.ts' : 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
 const workspaceFile = path.join(project, 'pnpm-workspace.yaml'), workspace = readFileSync(workspaceFile);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.9.0' });
+const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.10.0' });
 const calls = [], proofs = [];
-let overview, comparison, reading, snapshot, result, retainedGap, nestedCanary;
+let overview, comparison, reading, snapshot, result, retainedGap, nestedCanary, sideStatistics;
 async function call(name, parameters) {
   const started = performance.now();
   const response = await client.callTool({ name, arguments: parameters }, { timeout: 90000 });
@@ -153,6 +153,8 @@ try {
     snapshot = store.get(overview.snapshotId); assert.ok(snapshot);
     assert.ok(snapshot.configuration.inputs.some(x => x.path === 'pnpm-workspace.yaml'));
     const bundle = store.comparison(comparison.comparisonId); assert.ok(bundle);
+    sideStatistics=Object.fromEntries(['base','current'].map(side=>[side,{status:bundle[side].snapshot.status,statistics:bundle[side].snapshot.statistics,diagnostics:bundle[side].snapshot.diagnostics.length}]));
+    writeFileSync(path.join(run,'base-snapshot.json'),JSON.stringify(bundle.base.snapshot));
     assert.ok(bundle.base.snapshot.configuration.inputs.some(x => x.path === 'pnpm-workspace.yaml'));
     for (const captured of [bundle.base, bundle.current]) {
       const sources = new Map(captured.sources.map(x => [x.path, x]));
@@ -177,7 +179,7 @@ try {
   result = { passed: true, repository: 'https://github.com/TanStack/store', revision, run, project, core, dispatch, receivers, modelCalls: 0,
     snapshotId: overview.snapshotId, status: overview.status, statistics: overview.statistics, diagnostics: overview.totals.diagnostics, ...(retainedGap ? {retainedGap} : {}), ...(nestedCanary ? {nestedCanary} : {}),
     reading: reading.readingOrder.map(x => ({ name: x.node.name, path: x.node.path })),
-    comparison: { id: comparison.comparisonId, snapshotIds: comparison.snapshotIds, status: comparison.status, statistics: comparison.statistics,
+    comparison: { id: comparison.comparisonId, snapshotIds: comparison.snapshotIds, status: comparison.status, statistics: comparison.statistics, baselineDependencies:comparison.baselineDependencies,sideStatistics,
       truncated: comparison.truncated, paths: routes.length, crossPackageProofs: proofs },
     toolCalls: calls.length, maxResultCharacters: Math.max(...calls.map(x => x.response.content[0].text.length)),
     timings: calls.map(x => ({ tool: x.name, elapsedMs: x.elapsedMs })), ...(fixedCorpus ? { fixedCorpus } : {}) };

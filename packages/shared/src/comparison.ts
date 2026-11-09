@@ -4,6 +4,19 @@ export type ComparisonSide = "base" | "current";
 export interface ImpactFocus { side: ComparisonSide; nodeId: string }
 export interface ImpactTruncation { changes: boolean; seeds: boolean; paths: boolean; depth: boolean; work: boolean }
 export interface ComparisonSymbol { side: ComparisonSide; changeId: string; node: ExplorerNode }
+export interface BaselineDependencyEnvironment {
+  policy: "matched-local-declarations";
+  state: "available" | "partial" | "unavailable" | "not-captured";
+  copiedFiles: number;
+  copiedBytes: number;
+  copiedPackages: number;
+  skippedFiles: number;
+  reasons: { code: string; count: number }[];
+  skippedPackages: { name: string; reason: string }[];
+  omittedSkippedPackages: number;
+  identity: string;
+  notice: string;
+}
 export interface GitBaseline {
   state: "ready" | "no_head" | "not_repository" | "unavailable";
   head: string | null;
@@ -66,6 +79,7 @@ export interface ComparisonReport {
   focusNode?: ExplorerNode;
   overviewTruncated?: boolean;
   truncation?: ImpactTruncation;
+  baselineDependencies?: BaselineDependencyEnvironment;
   resolutionSummary?: { base: import("./index.js").ResolutionSummary | null; current: import("./index.js").ResolutionSummary };
   limitations: string[];
 }
@@ -73,6 +87,9 @@ export interface ComparisonBundle {
   report: ComparisonReport;
   base: { snapshot: AnalysisSnapshot; sources: CapturedSource[] } | null;
   current: { snapshot: AnalysisSnapshot; sources: CapturedSource[] };
+  /** Local verification inputs, never interpreted as historical project source. */
+  baselineDependencyInputs?: { path: string; hash: string }[];
+  baselineDependencyMissingInputs?: string[];
 }
 export interface ComparisonJob {
   id: string;

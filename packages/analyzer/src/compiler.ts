@@ -71,7 +71,10 @@ export function createCompiler(scan: ScanResult): CompilerContext {
           if (safeExisting(packageRoot) && realpathSync(packageRoot) !== scan.root) dependencyRoots.add(realpathSync(packageRoot));
         }
       }
-      if (isJson || isWorkspace || isDependency && !isLib) configReads.set(real, text);
+      // Global lib.*.d.ts belongs to the analyzer compiler. The compiler's own
+      // imported API declarations are ordinary dependency inputs when in scope.
+      const builtinLibrary = isLib && /^lib\..*\.d\.ts$/i.test(path.basename(location));
+      if (isJson || isWorkspace || isDependency && !builtinLibrary && within(scan.root, real)) configReads.set(real, text);
       return text;
     } catch { return undefined; }
   }

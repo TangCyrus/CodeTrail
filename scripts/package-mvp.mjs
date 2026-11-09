@@ -31,7 +31,7 @@ mkdirSync(path.join(bundle, "scripts"));
 for (const file of ["prepare-demo.mjs", "acceptance-projects.mjs", "setup-codex.mjs"]) cpSync(path.join(root, "scripts", file), path.join(bundle, "scripts", file));
 cpSync(path.join(root, "skills"), path.join(bundle, "skills"), { recursive: true, filter: allow });
 mkdirSync(path.join(bundle, "docs"));
-for (const file of ["MVP安装说明.md", "Agent接入说明.md", "命名迁移说明.md", "已知限制.md", "外部monorepo验收记录.md", "依赖与未构建入口验证记录.md", "核心调用与外部引用验证记录.md", "对象分发验证记录.md", "this与嵌套别名验证记录.md", "路径聚焦验证记录.md", "用户试用方案.md", "用户试用记录模板.csv", "AI解释评测样本.json"]) {
+for (const file of ["MVP安装说明.md", "Agent接入说明.md", "命名迁移说明.md", "已知限制.md", "外部monorepo验收记录.md", "依赖与未构建入口验证记录.md", "核心调用与外部引用验证记录.md", "对象分发验证记录.md", "this与嵌套别名验证记录.md", "路径聚焦验证记录.md", "HEAD依赖环境验证记录.md", "用户试用方案.md", "用户试用记录模板.csv", "AI解释评测样本.json"]) {
   if (!existsSync(path.join(root, "docs", file))) throw Error(`Missing release document: ${file}`);
   cpSync(path.join(root, "docs", file), path.join(bundle, "docs", file));
 }

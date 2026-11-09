@@ -84,7 +84,7 @@ function allowedHistoricalPath(name: string): boolean {
   if (path.isAbsolute(name) || name.includes("\\") || parts.some((part) => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part)
     || /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)
     || [".git", "node_modules", "dist", "build", "coverage", ".next", ".npm-cache", ".codetrail"].includes(part.toLowerCase()) || /^\.env(?:\.|$)/i.test(part))) return false;
-  return isSourcePath(name) || name.endsWith(".json") || name === "pnpm-workspace.yaml" || [".gitignore", ".codetrailignore"].includes(parts.at(-1)!);
+  return isSourcePath(name) || name.endsWith(".json") || name === "pnpm-workspace.yaml" || name === "pnpm-lock.yaml" || [".gitignore", ".codetrailignore"].includes(parts.at(-1)!);
 }
 
 /** Write only plain blobs into a new, tool-owned directory; never check out or run target code. */
@@ -123,7 +123,7 @@ export async function materializeBaseline(info: GitInspection, destination: stri
   }
   if (offset !== batch.length) throw new Error("Unexpected Git batch output");
   if (skipped) warnings.push(`HEAD 有 ${skipped} 个候选路径因文件类型、大小、编码或读取预算未物化，历史分析可能存在缺口。`);
-  warnings.push("HEAD 基线只读取已提交的源码与 JSON、根 pnpm-workspace.yaml 和忽略配置，不复用工作区未提交的依赖声明；两侧解析环境可能不同。");
+  warnings.push("HEAD 项目源码和配置只来自已提交的普通文件；依赖声明是否可复用由独立锁身份与内容哈希检查决定，两侧环境及剩余诊断需分别核实。");
   return warnings;
 }
 

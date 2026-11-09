@@ -64,6 +64,26 @@ test('focused MCP queries search preserved symbols and recover unlisted same-sid
  assert.deepEqual(stale.snapshotIds,overview.snapshotIds);
 });
 
+test('stdio comparison exposes matched HEAD declaration provenance and retains saved source after dependency changes',async t=>{
+ const project=tempProject(t,{'.gitignore':'node_modules/\n','package.json':JSON.stringify({name:'fixture',dependencies:{decl:'1.0.0'}}),
+ 'package-lock.json':JSON.stringify({lockfileVersion:3,packages:{'':{},'node_modules/decl':{version:'1.0.0',integrity:'sha512-fixture',resolved:'https://example.invalid/decl.tgz'}}}),
+ 'node_modules/decl/package.json':JSON.stringify({name:'decl',version:'1.0.0',types:'index.d.ts'}),
+ 'node_modules/decl/index.d.ts':'export interface Value {value:number}',
+ 'index.ts':"import type {Value} from 'decl';function target(x:Value){return x.value};export function caller(x:Value){return target(x)}"});
+ gitCommand(project.root,['init','--quiet']);gitCommand(project.root,['add','--all']);gitCommand(project.root,['commit','--quiet','-m','Declaration baseline']);
+ project.write('index.ts',"import type {Value} from 'decl';function target(x:Value){return x.value+1};export function caller(x:Value){return target(x)}");
+ const {call}=await start(t,{project});const comparison=await call('compare_worktree',{refresh:true,limit:3});
+ assert.equal(comparison.baselineDependencies.policy,'matched-local-declarations');assert.equal(comparison.baselineDependencies.state,'available');
+ assert.deepEqual(comparison.status,{base:'complete',current:'complete'});assert.equal(comparison.stale,false);
+ const path=comparison.paths.find(p=>p.side==='base'&&p.seed.name==='target');assert.ok(path);
+ const old=await call('read_evidence',{comparisonId:comparison.comparisonId,side:'base',evidenceId:path.steps[0].evidenceId});
+ assert.equal(old.snapshotId,comparison.snapshotIds.base);
+ project.write('node_modules/decl/index.d.ts','export interface Value {value:string}');
+ const stale=await call('compare_worktree',{comparisonId:comparison.comparisonId});assert.equal(stale.stale,true);
+ const saved=await call('read_evidence',{comparisonId:comparison.comparisonId,side:'base',evidenceId:path.steps[0].evidenceId});
+ assert.equal(saved.fileHash,old.fileHash);assert.deepEqual(saved.evidence,old.evidence);
+});
+
 test("real stdio handshake exposes six read-only tools and a complete source-backed exploration flow", async (t) => {
   const { client, call, project, stderr } = await start(t);
   const tools = (await client.listTools()).tools;

@@ -25,8 +25,10 @@ assert.ok(promoted.length > 0 || args.includes('--allow-unchanged'));
 for (const item of promoted) assert.ok(resolved.has(site(item)), `Removed unresolved site lacks a real static edge: ${site(item)}`);
 assert.ok(args.includes('--allow-unchanged') ? after.unresolved.length <= before.unresolved.length : after.unresolved.length < before.unresolved.length);
 const files = new Map(after.files.map(x => [x.id, x])), source = new Map();
+const captured = option('--sources') ? new Map(JSON.parse(readFileSync(option('--sources'),'utf8')).map(item=>[item.path,item.content])) : null;
 for (const file of after.files) {
-  const bytes = readFileSync(path.join(after.rootDir, file.path));
+  if(captured)assert.equal(typeof captured.get(file.path),'string',`Missing preserved source: ${file.path}`);
+  const bytes = captured ? Buffer.from(captured.get(file.path) ?? '') : readFileSync(path.join(after.rootDir, file.path));
   assert.equal(createHash('sha256').update(bytes).digest('hex'), file.hash);
   source.set(file.id, bytes.toString('utf8'));
 }

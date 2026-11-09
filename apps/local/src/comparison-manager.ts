@@ -7,6 +7,7 @@ import { calculateComparisonImpact, comparisonSymbols } from "@codetrail/graph";
 import type { ComparisonBundle, ComparisonJob, ComparisonReport, ComparisonSide, ImpactFocus } from "@codetrail/shared";
 import type { SnapshotStore } from "./store.js";
 import { inspectGit } from "./git.js";
+import { baselineDependencyInputsStale } from "./baseline-dependencies.js";
 
 export class ComparisonManager {
   private worker: Worker | null = null;
@@ -26,7 +27,8 @@ export class ComparisonManager {
   }
   async stale(id: string): Promise<boolean> {
     const bundle = this.bundle(id);
-    if (!bundle || bundle.report.stale || isSnapshotStale(bundle.current.snapshot)) return true;
+    if (!bundle || bundle.report.stale || isSnapshotStale(bundle.current.snapshot)
+      || baselineDependencyInputsStale(this.rootDir, bundle.baselineDependencyInputs, bundle.baselineDependencyMissingInputs)) return true;
     const git = await inspectGit(this.rootDir);
     return git.head !== bundle.report.baseline.head || git.state !== bundle.report.baseline.state;
   }

@@ -12,7 +12,7 @@ import { summarizeResolution } from "@codetrail/shared";
 import { AnalysisManager } from "./analysis-manager.js";
 import { ComparisonManager } from "./comparison-manager.js";
 
-export const MCP_VERSION = "0.9.0";
+export const MCP_VERSION = "0.10.0";
 export const MCP_RESULT_CHARACTERS = 48_000;
 const id = z.string().min(1).max(512);
 const pinned = { snapshotId: id.describe("Exact snapshotId returned by project_overview; never substitute another snapshot.") };
@@ -210,6 +210,7 @@ export async function createMcpRuntime(options: McpOptions) {
           status: { base: bundle.base?.snapshot.status ?? null, current: bundle.current.snapshot.status },
           unresolved: { base: report.statistics.oldUnresolved, current: report.statistics.newUnresolved }, sourceTrust: "untrusted-repository-data",
           resolutionSummary: { base: bundle.base ? summarizeResolution(bundle.base.snapshot.unresolved) : null, current: summarizeResolution(bundle.current.snapshot.unresolved) },
+          ...(report.baselineDependencies ? { baselineDependencies:report.baselineDependencies } : {}),
           includeTypes, focus:report.focus??null, focusNode:report.focusNode?thinNode(report.focusNode):null, overviewTruncated:report.overviewTruncated??report.truncated,
           analysisTruncated:report.truncated, truncation:report.truncation,
           ...(symbolQuery===undefined?{}:{symbols:symbols.slice(symbolOffset,symbolOffset+limit).map(item=>({...item,node:thinNode(item.node)})),totalSymbols:symbols.length,nextSymbolOffset:symbolOffset+limit<symbols.length?symbolOffset+limit:null}),
