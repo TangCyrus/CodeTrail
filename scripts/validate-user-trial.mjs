@@ -46,7 +46,7 @@ async function rehearse(scenario) {
     assert.equal(git(project, ['status', '--porcelain=v1', '-z']), '', 'Use a clean disposable external clone');
     assert.ok(!/^(?:filter\.|include(?:if\..*)?\.)/im.test(git(project, ['config', '--local', '--no-includes', '--list'])));
   }
-  const client = new Client({ name: 'codetrail-user-trial-prerun', version: '0.10.0' });
+  const client = new Client({ name: 'codetrail-user-trial-prerun', version: '0.11.0' });
   const calls = [], result = { project: scenario.id, root: project, head, kind: 'scripted-engineering-prerun', modelCalls: 0, tasks: {}, passed: false };
   async function call(name, parameters) {
     const started = performance.now(), response = await client.callTool({ name, arguments: parameters }, { timeout: 90000 });
@@ -77,7 +77,7 @@ async function rehearse(scenario) {
     await client.connect(new StdioClientTransport({ command: process.execPath,
       args: [path.join(root, 'apps/local/dist/cli.js'), 'mcp', project, '--data-dir', cache], stderr: 'pipe' }));
     result.server = client.getServerVersion();
-    assert.equal(result.server.name, 'codetrail'); assert.equal(result.server.version, '0.10.0');
+    assert.equal(result.server.name, 'codetrail'); assert.equal(result.server.version, '0.11.0');
     const overview = await call('project_overview', { refresh: true });
     assert.equal(overview.project.rootDir, project); assert.equal(overview.stale, false);
     if (scenario.id === 'self') assert.equal(overview.status, 'complete');

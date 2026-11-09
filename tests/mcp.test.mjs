@@ -84,6 +84,27 @@ test('stdio comparison exposes matched HEAD declaration provenance and retains s
  assert.equal(saved.fileHash,old.fileHash);assert.deepEqual(saved.evidence,old.evidence);
 });
 
+test('stdio task reading remains snapshot-bound, keeps examples explicitly selectable and rejects invalid roots', async t => {
+  const project=tempProject(t,{
+    'main.ts':'export function main(){return helper()} function helper(){return 1}',
+    'examples/main.ts':'export function example(){return 1}',
+  });
+  const {call,client}=await start(t,{project});
+  const overview=await call('project_overview',{refresh:true}),snapshotId=overview.snapshotId;
+  const found=await call('search_symbols',{snapshotId,query:'main'}),root=found.results.find(item=>item.name==='main'&&item.path==='main.ts');assert.ok(root);
+  const reading=await call('recommend_reading',{snapshotId,focusNodeIds:[root.id]});
+  assert.equal(reading.scope.mode,'focused');assert.equal(reading.snapshotId,snapshotId);assert.equal(reading.stale,false);
+  assert.equal(reading.readingOrder[0].node.id,root.id);assert.ok(reading.readingOrder.some(step=>step.node.name==='helper'));
+  assert.ok(reading.readingOrder.every(step=>step.node.path==='main.ts'));
+  const examples=await call('search_symbols',{snapshotId,query:'example'}),example=examples.results.find(item=>item.name==='example');assert.ok(example);
+  const explicit=await call('recommend_reading',{snapshotId,focusNodeIds:[example.id]});assert.equal(explicit.readingOrder[0].node.id,example.id);
+  const invalid=await client.callTool({name:'recommend_reading',arguments:{snapshotId,focusNodeIds:['unknown']}});
+  assert.equal(invalid.isError,true);assert.equal(invalid.structuredContent.code,'INVALID_SELECTOR');
+  project.write('main.ts','export function renamed(){return 2}');
+  const stale=await call('recommend_reading',{snapshotId,focusNodeIds:[root.id]});assert.equal(stale.stale,true);assert.deepEqual(stale.scope,reading.scope);
+  assert.deepEqual(stale.readingOrder,reading.readingOrder);
+});
+
 test("real stdio handshake exposes six read-only tools and a complete source-backed exploration flow", async (t) => {
   const { client, call, project, stderr } = await start(t);
   const tools = (await client.listTools()).tools;

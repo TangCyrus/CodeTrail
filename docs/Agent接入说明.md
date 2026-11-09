@@ -1,4 +1,4 @@
-# Agent 接入说明（0.10.0）
+# Agent 接入说明（0.11.0）
 
 CodeTrail 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 查询架构、阅读顺序、符号关系、源码证据及 Git 改动影响。浏览器工作台仍可独立运行，也可以与 MCP 共用快照。
 
@@ -44,7 +44,7 @@ npm ci --ignore-scripts
 npm run build
 ```
 
-预编译 **0.10.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
+预编译 **0.11.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
 
 ## 生成接入包
 
@@ -114,7 +114,7 @@ tool_timeout_sec = 90
 - `search_symbols({snapshotId, query, limit?})`：按名称和路径检索模块、文件、符号，最多 20 个结果。返回总匹配数和截断标志。
 - `symbol_context({snapshotId, nodeId, depth?, maxNodes?, includeTypes?})`：最多两跳、40 个节点和 40 组关系。默认一跳、20 节点，排除规则候选，引用关系可见。证据 ID 可单独读取。
 - `read_evidence(...)`：读取一个保留快照中的源码窗口。传 `snapshotId`，或 `comparisonId` 加 `side: base/current`，两种方式不能混用；另选一个 `evidenceId`、符号 `nodeId` 或 `fileId`。默认 40 行，最多 80 行；`line` 用于继续读取。
-- `recommend_reading({snapshotId})`：最多十步阅读顺序、推荐依据及证据。结构指标不等于业务重要性，阅读顺序不等于运行时执行顺序。
+- `recommend_reading({snapshotId, focusNodeIds?})`：最多十步阅读顺序、推荐依据及证据。默认暂缓示例目录并平衡接入/启动/包接口候选；任务明确时，先搜索并核实 1–3 个符号 ID，再指定 `focusNodeIds`。返回 `scope.mode`、`focusNodeIds`、`deferredExampleFiles`；显式任务起点不等于启动入口，后续仅沿两跳向外的静态调用/组件关系，不用无关节点补满。文件/测试/已排除声明及无效 ID 会明确报错。仍需固定 snapshotId、核对 stale、逐条打开证据。结构指标不等于业务重要性，阅读顺序不等于运行时执行顺序。
 - `compare_worktree({refresh?, comparisonId?, includeTypes?, changeOffset?, pathOffset?, limit?})`：首次创建 HEAD 与工作区比较，其后默认复用；`refresh: true` 重做比较，不能同时传 `comparisonId`。每页默认五项，最多十项，按 `nextChangeOffset` / `nextPathOffset` 继续读取同一比较。
 
 固定快照查询都要求明确的 `snapshotId`。比较内的证据只能用其 `comparisonId` 和对应版本读取，不能拿比较的快照 ID 去普通快照查询。符号/文件 ID 必须来自相应结果，不接受任意磁盘路径。

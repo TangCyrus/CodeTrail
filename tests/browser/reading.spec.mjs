@@ -51,7 +51,8 @@ test("recommendations and reading sequence lead to real source; saved reading st
   await expect(start.getByRole("button", { name: "已加入 start 的阅读清单" })).toBeDisabled();
   await page.getByRole("tab", { name: "推荐顺序", exact: true }).click();
   await expect(page.locator(".reading-order > li").first()).toContainText("start");
-  await expect(page.locator(".reading-order > li").nth(1)).toContainText("submit");
+  const submit = page.locator(".reading-order > li").filter({ has: page.getByText("submit", { exact: true }) });
+  await expect(submit).toContainText("沿 start 的调用");
   await page.getByRole("tab", { name: /^我的清单/ }).click();
   await page.getByRole("checkbox", { name: "标记 start 为已读" }).check();
   await expect(page.locator(".reading-list-summary")).toContainText("已读 1 / 1");

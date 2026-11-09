@@ -32,7 +32,8 @@ test("recommendations balance categories and attach real, snapshot-bound reasons
 
 test("reading order starts with a candidate and every follow step has a real preceding static edge", () => {
   assert.equal(guide.readingOrder[0].node.name, "start");
-  assert.equal(guide.readingOrder[1].node.name, "submit");
+  const submit = guide.readingOrder.find(step => step.node.name === "submit");
+  assert.equal(submit.fromNodeId, guide.readingOrder[0].node.id);
   const previous = new Set();
   for (const step of guide.readingOrder) {
     assert.ok(!previous.has(step.node.id));
@@ -70,6 +71,64 @@ test("anonymous error callbacks in a main file are not promoted to architectural
   assert.equal(result.groups.find(x => x.id === 'entry').items.length, 0);
   assert.equal(result.readingOrder[0].node.name, 'bootstrap');
   assert.ok(result.readingOrder.every(x => x.kind !== 'entry' || !x.node.name.startsWith('<anonymous@')));
+});
+
+test("project recommendations balance service, launch and package interfaces without example or App helper interference", t => {
+  const project = tempProject(t, {
+    'apps/agent/mcp.ts': 'export function createRuntime(){return 1}',
+    'apps/agent/cli.ts': "import {parse} from '../../packages/parser'; export function main(){return parse()}",
+    'apps/agent/worker.ts': "import {buildGraph} from '../../packages/graph'; export function work(){return buildGraph()}",
+    'packages/parser/index.ts': 'export function parse(){return 1}',
+    'packages/graph/index.ts': "import {parse} from '../parser';export function buildGraph(){return parse()}",
+    'apps/web/App.tsx': 'export function App(){return formatLabel()} function formatLabel(){return 1}',
+    'examples/demo/main.ts': 'export function main(){return demonstration()} export function demonstration(){return 1}',
+  });
+  const result = recommendReading(project.analyze());
+  assert.equal(result.scope.mode, 'project'); assert.equal(result.scope.deferredExampleFiles, 1);
+  const roots = result.groups[0].items;
+  assert.ok(roots.some(item => item.node.path === 'apps/agent/mcp.ts'));
+  assert.ok(roots.some(item => item.node.path.startsWith('packages/')));
+  assert.ok(result.readingOrder.every(step => !step.node.path.startsWith('examples/')));
+  assert.ok(result.groups.flatMap(group => group.items).every(item => !item.node.path.startsWith('examples/')));
+  assert.ok(roots.every(item => item.node.name !== 'formatLabel'));
+});
+
+test("focused reading preserves all task roots, bounded proven paths and excludes unrelated high-ranking code", t => {
+  const project = tempProject(t, {
+    'main.ts': 'export function main(){ return one()+two()+three()+four()+five()+six() } function one(){return 1} function two(){return 2} function three(){return 3} function four(){return 4} function five(){return 5} function six(){return 6}',
+    'parse.ts': 'export function parse(){return tokenize()} function tokenize(){return 1}',
+    'graph.ts': 'export function graph(){return link()} function link(){return 1}',
+    'examples/main.ts': 'export function main(){return 1}',
+    'unrelated/index.ts': 'export function unrelated(){return 1}',
+  });
+  const snapshot = project.analyze(), ids = [['main.ts','main'], ['parse.ts','parse'], ['graph.ts','graph']].map(([file,name]) => findSymbol(snapshot,file,name).id);
+  const result = recommendReading(snapshot, undefined, {focusNodeIds:ids});
+  assert.deepEqual(result.readingOrder.slice(0,3).map(step=>step.node.id), ids);
+  assert.ok(result.readingOrder.some(step=>step.node.name==='tokenize'));
+  assert.ok(result.readingOrder.some(step=>step.node.name==='link'));
+  assert.ok(result.readingOrder.every(step=>!step.node.path.startsWith('unrelated/')&&!step.node.path.startsWith('examples/')));
+  assert.deepEqual(result.scope, {mode:'focused',focusNodeIds:ids,deferredExampleFiles:0});
+  const previous = new Set();
+  for (const step of result.readingOrder) {
+    if (step.kind==='follow') {
+      const edge=snapshot.relations.find(edge=>edge.id===step.viaRelationId);
+      assert.ok(previous.has(step.fromNodeId));assert.equal(edge.from,step.fromNodeId);assert.equal(edge.to,step.node.id);
+      assert.equal(edge.origin,'static');assert.ok(['CALLS','RENDERS'].includes(edge.kind));
+    }
+    previous.add(step.node.id);
+  }
+  for(const item of result.groups.flatMap(group=>group.items))for(const reason of item.reasons)assert.ok(reason.evidenceIds.every(id=>snapshot.evidence.some(proof=>proof.id===id)));
+  const example=findSymbol(snapshot,'examples/main.ts','main');
+  const focusedExample=recommendReading(snapshot,undefined,{focusNodeIds:[example.id]});
+  assert.equal(focusedExample.readingOrder[0].node.id,example.id);
+  assert.ok(focusedExample.readingOrder.every(step=>step.node.path==='examples/main.ts'));
+});
+
+test("invalid focused selectors fail explicitly and example-only roots retain a reading route", t => {
+  const project=tempProject(t,{'examples/main.ts':'export function main(){return 1}', 'tests/check.test.ts':'export function testOnly(){return 1}'});
+  const snapshot=project.analyze(), node=findSymbol(snapshot,'examples/main.ts','main'), invalid=findSymbol(snapshot,'tests/check.test.ts','testOnly');
+  assert.equal(recommendReading(snapshot).readingOrder[0].node.id,node.id);
+  for(const focusNodeIds of [[],['unknown'],[snapshot.files[0].id],[invalid.id],[node.id,node.id,node.id,node.id]])assert.throws(()=>recommendReading(snapshot,undefined,{focusNodeIds}),RangeError);
 });
 
 test("bookmarks retain explicit read state across snapshots and never resolve a moved node by guessing", (t) => {

@@ -16,7 +16,7 @@ const marker=' // CodeTrail HEAD dependency acceptance; no runtime change.',need
 assert.ok(original.toString('utf8').includes(needle));assert.ok(!original.toString('utf8').includes(marker));
 const probe=Buffer.from(original.toString('utf8').replace(needle,needle+marker));
 const sha=value=>createHash('sha256').update(value).digest('hex');
-const client=new Client({name:'codetrail-head-dependency-acceptance',version:'0.10.0'}),calls=[];let result;
+const client=new Client({name:'codetrail-head-dependency-acceptance',version:'0.11.0'}),calls=[];let result;
 async function call(name,args){const started=performance.now(),r=await client.callTool({name,arguments:args},{timeout:90000});assert.notEqual(r.isError,true,JSON.stringify(r));assert.ok(r.content[0].text.length<=48000);const data={...r.structuredContent};delete data.workbenchUrl;calls.push({name,args,elapsedMs:Math.round(performance.now()-started),data});return data}
 try{
  await client.connect(new StdioClientTransport({command:process.execPath,args:[path.join(root,'apps/local/dist/cli.js'),'mcp',root,'--data-dir',cache],stderr:'pipe'}));

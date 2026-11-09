@@ -12,7 +12,7 @@ import { summarizeResolution } from "@codetrail/shared";
 import { AnalysisManager } from "./analysis-manager.js";
 import { ComparisonManager } from "./comparison-manager.js";
 
-export const MCP_VERSION = "0.10.0";
+export const MCP_VERSION = "0.11.0";
 export const MCP_RESULT_CHARACTERS = 48_000;
 const id = z.string().min(1).max(512);
 const pinned = { snapshotId: id.describe("Exact snapshotId returned by project_overview; never substitute another snapshot.") };
@@ -179,14 +179,17 @@ export async function createMcpRuntime(options: McpOptions) {
           matchesCurrentFile: sourceMatches(snapshot, file.id), evidence: proof ? evidence(snapshot, [proof.id]) : [],
           ...(workbenchUrl ? { workbenchUrl } : {}) };
       });
-    register(server, "recommend_reading", "Recommend at most ten source-backed reading steps in an exact snapshot. Structural metrics and filename rules are labeled separately; this is not a runtime execution trace or a business importance score.",
-      z.object(pinned).strict(), ({ snapshotId }) => {
-        const model = explorer(snapshotId), guide = recommendReading(model.snapshot, model);
+    register(server, "recommend_reading", "Recommend at most ten source-backed reading steps in an exact snapshot. Default recommendations defer examples when core source exists. Optionally supply 1–3 focusNodeIds from search_symbols to build a task route from those symbols and their two-hop outgoing static calls/renders. Selected roots are not inferred startup entries. Structural metrics and path rules are labeled separately; this is not execution or business importance.",
+      z.object({ ...pinned, focusNodeIds: z.array(id).min(1).max(3).optional() }).strict(), ({ snapshotId, focusNodeIds }) => {
+        const model = explorer(snapshotId);
+        let guide;
+        try { guide = recommendReading(model.snapshot, model, focusNodeIds ? { focusNodeIds } : {}); }
+        catch (error) { if (error instanceof RangeError) throw new ToolError("INVALID_SELECTOR", error.message); throw error; }
         const evidenceIds = guide.readingOrder.flatMap((step) => step.evidenceIds);
         return { ...metadata(model.snapshot), algorithmVersion: guide.algorithmVersion, limitations: [...model.snapshot.limitations, ...guide.limitations],
           groups: guide.groups.map((group) => ({ ...group, items: group.items.map((item) => ({ ...item, node: thinNode(item.node) })) })),
           readingOrder: guide.readingOrder.map((step) => ({ ...step, node: thinNode(step.node) })),
-          evidence: evidence(model.snapshot, evidenceIds), truncated: new Set(evidenceIds).size > 8, excludedFiles: guide.excludedFiles };
+          evidence: evidence(model.snapshot, evidenceIds), truncated: new Set(evidenceIds).size > 8, excludedFiles: guide.excludedFiles, scope: guide.scope };
       });
     register(server, "compare_worktree", "Compare HEAD with working source, preserving base/current evidence. Refresh creates a comparison. Pin comparisonId; use symbolQuery/symbolSide to discover symbols in changed files, then focus={side,nodeId} to independently trace that symbol from the preserved graph, beyond overview path/seed caps. Keep focus and includeTypes on every page. analysisTruncated/truncation describe analysis limits; pageTruncated describes bounded response pages. Symbols may be unchanged inside changed files. Paths are static relationships, never coverage/failure proof. Missing HEAD degrades explicitly.",
       z.object({ refresh: z.boolean().default(false), comparisonId: id.optional(), includeTypes: z.boolean().default(false), focus: z.object({side:z.enum(["base","current"]),nodeId:id}).strict().optional(), symbolQuery:z.string().trim().max(200).optional(), symbolSide:z.enum(["base","current"]).optional(), symbolOffset:z.number().int().min(0).max(100_000).default(0), changeOffset: z.number().int().min(0).max(100_000).default(0), pathOffset: z.number().int().min(0).max(100_000).default(0), limit: z.number().int().min(1).max(10).default(5) }).strict(),

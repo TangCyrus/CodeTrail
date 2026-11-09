@@ -22,12 +22,14 @@ export interface ReadingStep {
   fromNodeId?: string;
   viaRelationId?: string;
 }
+export interface ReadingOptions { focusNodeIds?: string[] }
 export interface ReadingGuide {
   snapshotId: string;
   algorithmVersion: string;
   groups: { id: RecommendationCategory; title: string; description: string; items: CodeRecommendation[] }[];
   readingOrder: ReadingStep[];
   excludedFiles: number;
+  scope: { mode: "project" | "focused"; focusNodeIds: string[]; deferredExampleFiles: number };
   limitations: string[];
 }
 export interface ReadingBookmark {

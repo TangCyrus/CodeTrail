@@ -45,6 +45,8 @@ try {
   const search = await call("search_symbols", { snapshotId: overview.snapshotId, query: "submit" });
   const node = search.results.find((item) => item.name === "submit"); assert.ok(node);
   const source = await call("read_evidence", { snapshotId: overview.snapshotId, nodeId: node.id }); assert.equal(source.matchesCurrentFile, true);
+  const taskReading = await call("recommend_reading", { snapshotId: overview.snapshotId, focusNodeIds: [node.id] });
+  assert.equal(taskReading.scope.mode,"focused"); assert.equal(taskReading.readingOrder[0].node.id,node.id);
   const impact = await call("compare_worktree"); assert.equal(impact.baseline.state, "ready"); assert.ok(impact.totals.paths > 0);
   assert.equal(impact.baselineDependencies.policy,"matched-local-declarations");
   const symbols = await call("compare_worktree",{comparisonId:impact.comparisonId,symbolQuery:"amount",symbolSide:"current",limit:5});

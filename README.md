@@ -6,9 +6,11 @@
 
 从旧版本升级时，命令、MCP 服务名、Skill、环境变量及忽略文件需要一起切换，见 [0.3.0 迁移说明](docs/命名迁移说明.md)。
 
-当前为 **0.10.0 本地 Agent 接入试用版**：提供六个 MCP 工具、理解项目与改动影响两个 Skill，支持根目录内 project references 和工作区包的源码解析。首个验收宿主为 Codex，浏览器工作台可独立使用或共享 MCP 快照。真实用户效果和模型自主调用、语义解释质量仍待验证。
+当前为 **0.11.0 本地 Agent 接入试用版**：提供六个 MCP 工具、理解项目与改动影响两个 Skill，支持根目录内 project references 和工作区包的源码解析。首个验收宿主为 Codex，浏览器工作台可独立使用或共享 MCP 快照。真实用户效果和模型自主调用、语义解释质量仍待验证。
 
-Agent 接入见 [Agent 接入说明](docs/Agent接入说明.md)，独立工作台见 [MVP 安装说明](docs/MVP安装说明.md)，能力边界见 [已知限制](docs/已知限制.md)。Windows 0.10.0 预编译 ZIP 包含 MCP、Skill 和生产依赖；需本机 Node.js 24.x，Git 用于可选的改动比较，无需重新 npm 安装或构建。历史 0.1.0 ZIP 不含 Agent 接入功能。
+Agent 接入见 [Agent 接入说明](docs/Agent接入说明.md)，独立工作台见 [MVP 安装说明](docs/MVP安装说明.md)，能力边界见 [已知限制](docs/已知限制.md)。Windows 0.11.0 预编译 ZIP 包含 MCP、Skill 和生产依赖；需本机 Node.js 24.x，Git 用于可选的改动比较，无需重新 npm 安装或构建。历史 0.1.0 ZIP 不含 Agent 接入功能。
+
+0.11.0 改进阅读的任务相关性：默认暂缓示例目录，并平衡 MCP/服务接入、启动位置和跨模块包接口；明确任务可先搜索符号，再向 `recommend_reading` 提供 1–3 个 `focusNodeIds`。任务路线仅沿两跳真实调用/组件关系展开，不用无关代码凑满十步。默认工作台同步使用新排序；指定任务起点通过 MCP 使用。规则、同快照对照与验收见[任务阅读推荐验证](docs/任务阅读推荐验证记录.md)。
 
 0.10.0 补齐 Git HEAD 的依赖声明环境：只复用包身份与旧新锁文件匹配、内容哈希可核对的本地声明/JSON，旧新项目源码仍分别来自 Git 和工作区。CodeTrail 自身 HEAD 侧恢复为 0 诊断，并恢复跨包两跳链路；TanStack Store 保留无法核对的依赖缺口。来源、拒绝规则和实跑口径见 [HEAD 依赖环境验证](docs/HEAD依赖环境验证记录.md)。
 
@@ -20,7 +22,7 @@ Agent 接入见 [Agent 接入说明](docs/Agent接入说明.md)，独立工作�
 
 ## 接入 Agent
 
-源码完成下方构建后，或在 0.10.0 预编译包根目录，生成接入包：
+源码完成下方构建后，或在 0.11.0 预编译包根目录，生成接入包：
 
 ```powershell
 node scripts/setup-codex.mjs "D:\你的项目" --out "D:\CodeTrail接入包"
@@ -154,7 +156,7 @@ npm run release
 npm run verify:release
 ```
 
-`npm run check` 编译前后端、运行 143 项 Node 测试，并验证人工标注样例。`npm run test:browser` 使用已安装的 Google Chrome 运行 24 条流程，覆盖架构、阅读、AI/Git、三个代表项目、100 节点交互、布局超时/失败与源码重试；执行前先完成构建。`npm run validate:monorepo` 用本项目验证真实跨包调用与源码证据。也可分别执行 `npm test`、`npm run validate:fixtures`、`npm run validate:acceptance`。
+`npm run check` 编译前后端、运行 147 项 Node 测试，并验证人工标注样例。`npm run test:browser` 使用已安装的 Google Chrome 运行 24 条流程，覆盖架构、阅读、AI/Git、三个代表项目、100 节点交互、布局超时/失败与源码重试；执行前先完成构建。`npm run validate:monorepo` 用本项目验证真实跨包调用与源码证据。`npm run validate:reading` 核对两项目默认与任务聚焦阅读，在同一快照对照旧算法，并检查本次自分析真实改动的旧新影响证据（完整源码及固定 TanStack 克隆，需保留 `583354f` 的 Git 历史）。也可分别执行 `npm test`、`npm run validate:fixtures`、`npm run validate:acceptance`。
 
 `npm run benchmark` 在新进程中重复测量三个样例、100/500 文件合成项目和工具自身，另测 Git 双图比较；不执行目标代码，不清空操作系统文件缓存。原始样本、硬件、输入快照和预算结论保存到 `artifacts/phase-five/performance.json`。既有基准（本次解析器变更前）中，本机 500 文件/12,977 行的三次首次解析约 1.97–2.09 秒，缓存搜索/两跳查询 p95 约 16 毫秒；完整 Git 比较约 19.6–25.2 秒，不能把这些数值当作新版或所有 500 文件项目的保证。0.4.0 自分析的时间成本见 [monorepo 验证记录](docs/monorepo解析验证记录.md)。
 
