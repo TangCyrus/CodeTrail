@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ComparisonJob, ComparisonPath, ComparisonReport, ComparisonSide, ComparisonSourceTarget, ExplorerNode, FileChange, GitBaseline, SymbolChangeKind } from "@codetrail/shared";
+import type { ComparisonJob, ComparisonPath, ComparisonSymbol, ImpactFocus, ComparisonReport, ComparisonSide, ComparisonSourceTarget, ExplorerNode, FileChange, GitBaseline, SymbolChangeKind } from "@codetrail/shared";
 import { api, ignoredAbort, messageOf } from "./api.js";
 import { Icon, InlineError, LoadingRows, relationLabel } from "./ui.js";
 
@@ -17,6 +17,14 @@ export function ImpactPage({ onOpen, onComparison, onDefaultSource, onStatus }: 
   const [tab, setTab] = useState<"changes" | "paths" | "tests">("changes");
   const [filter, setFilter] = useState("all");
   const [focus, setFocus] = useState("all");
+  const [symbolFocus, setSymbolFocus] = useState<ImpactFocus | null>(null);
+  const [symbolQuery, setSymbolQuery] = useState("");
+  const [symbolSide, setSymbolSide] = useState<ComparisonSide>("current");
+  const [symbols, setSymbols] = useState<ComparisonSymbol[]>([]);
+  const [symbolOffset, setSymbolOffset] = useState(0);
+  const [symbolTotal, setSymbolTotal] = useState(0);
+  const [symbolsLoading, setSymbolsLoading] = useState(false);
+  const [symbolError, setSymbolError] = useState("");
   const [error, setError] = useState("");
   const [booting, setBooting] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -36,7 +44,7 @@ export function ImpactPage({ onOpen, onComparison, onDefaultSource, onStatus }: 
     const poll = async () => {
       try {
         const next = await api<ComparisonJob>(`/comparison-jobs/${job.id}`, { signal: controller.signal }); setJob(next);
-        if (next.comparisonId && next.status === "completed") { setReportId(next.comparisonId); setReportRevision((value) => value + 1); setFocus("all"); onComparison(); }
+        if (next.comparisonId && next.status === "completed") { setReportId(next.comparisonId); setReportRevision((value) => value + 1); setFocus("all"); setSymbolFocus(null); setSymbolQuery(""); onComparison(); }
         if (next.status === "running") timer = setTimeout(() => void poll(), 300);
       } catch (failure) { if (!ignoredAbort(failure)) { setError(messageOf(failure)); timer = setTimeout(() => void poll(), 1500); } }
     };
@@ -45,7 +53,8 @@ export function ImpactPage({ onOpen, onComparison, onDefaultSource, onStatus }: 
   useEffect(() => {
     if (!reportId) return;
     const controller = new AbortController(); setLoadingReport(true);
-    void api<ComparisonReport>(`/comparisons/${encodeURIComponent(reportId)}/impact?includeTypes=${includeTypes}`, { signal: controller.signal })
+    const selector = symbolFocus ? `&focusSide=${symbolFocus.side}&focusNodeId=${encodeURIComponent(symbolFocus.nodeId)}` : "";
+    void api<ComparisonReport>(`/comparisons/${encodeURIComponent(reportId)}/impact?includeTypes=${includeTypes}${selector}`, { signal: controller.signal })
       .then((value) => {
         setReport((current) => ({ ...value, stale: value.stale || !!(current?.id === value.id && current.createdAt === value.createdAt && current.stale) })); setGit(value.baseline); setLoadingReport(false);
         const first = value.changes[0], file = first?.newFile ?? first?.oldFile;
@@ -53,7 +62,7 @@ export function ImpactPage({ onOpen, onComparison, onDefaultSource, onStatus }: 
       })
       .catch((failure: unknown) => { if (!ignoredAbort(failure)) { setError(messageOf(failure)); setLoadingReport(false); } });
     return () => controller.abort();
-  }, [reportId, includeTypes, reportRevision]);
+  }, [reportId, includeTypes, reportRevision, symbolFocus?.side, symbolFocus?.nodeId]);
   useEffect(() => {
     if (!reportId) return;
     const controller = new AbortController();
@@ -63,6 +72,18 @@ export function ImpactPage({ onOpen, onComparison, onDefaultSource, onStatus }: 
     check(); const timer = setInterval(check, 8000);
     return () => { controller.abort(); clearInterval(timer); };
   }, [reportId, reportRevision]);
+  useEffect(() => {
+    setSymbols([]); setSymbolError(""); setSymbolTotal(0);
+    if (!reportId || tab === "changes" || !symbolQuery.trim()) { setSymbolsLoading(false); return; }
+    const controller = new AbortController(); setSymbolsLoading(true);
+    const timer = setTimeout(() => {
+      void api<{ symbols: ComparisonSymbol[]; total: number }>(`/comparisons/${encodeURIComponent(reportId)}/symbols?q=${encodeURIComponent(symbolQuery.trim())}&side=${symbolSide}&offset=${symbolOffset}&limit=10`, { signal: controller.signal })
+        .then(value => { setSymbols(value.symbols); setSymbolTotal(value.total); setSymbolsLoading(false); })
+        .catch((failure: unknown) => { if (!ignoredAbort(failure)) { setSymbolError(messageOf(failure)); setSymbolsLoading(false); } });
+    }, 200);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [reportId, tab, symbolQuery, symbolSide, symbolOffset]);
+  function focusSymbol(side: ComparisonSide, nodeId: string) { setSymbolFocus({side,nodeId}); setFocus("all"); setTab("paths"); }
   async function compare() {
     setStarting(true); setError("");
     try { setJob(await api<ComparisonJob>("/comparisons", { method: "POST", body: "{}" })); }
@@ -93,14 +114,27 @@ export function ImpactPage({ onOpen, onComparison, onDefaultSource, onStatus }: 
     {job?.status === "failed" && <InlineError message={job.error ?? "比较未完成，请重试。"} retry={() => void compare()}/>}
     {job?.status === "cancelled" && <p className="comparison-notice" role="status">比较已取消，可重新比较。已有结果和证据仍可阅读。</p>}
     {booting ? <LoadingRows label="检查 Git 与最近比较…"/> : !report ? <div className="impact-content"><div className="impact-intro"><h2>核实当前改动的潜在关联</h2><p>比较已暂存、未暂存及范围内未跟踪源码。从变化的声明出发，分别追踪旧版与新版的调用、引用和文件导入。</p><p>默认最多两跳，不运行项目代码或测试，也不修改 Git 索引。</p>{git?.state !== "ready" && <p className="comparison-notice">{git?.message}</p>}</div></div> : <>
-      <div className="comparison-summary"><span><strong>{report.statistics.files}</strong> 个变化文件</span><span><strong>{report.statistics.symbols}</strong> 个变化声明</span><span><strong>{report.statistics.paths}</strong> 条关联路径</span><span><strong>{report.statistics.testFiles}</strong> 个静态关联测试文件</span></div>
+      <div className="comparison-summary"><span><strong>{report.statistics.files}</strong> 个变化文件</span><span><strong>{report.statistics.symbols}</strong> 个变化声明</span><span><strong>{report.statistics.paths}</strong> 条{report.focus ? "聚焦" : "概览"}关联路径</span><span><strong>{report.statistics.testFiles}</strong> 个静态关联测试文件</span></div>
       {report.stale && <div className="comparison-notice is-stale" role="status">工作区或 HEAD 已变化，以下保留比较时的结果与源码。请重新比较。</div>}
       {report.baseline.state !== "ready" && <div className="comparison-notice">{report.baseline.message}</div>}
       <div className="impact-toolbar"><div className="impact-tabs" role="tablist" aria-label="改动影响视图"><button role="tab" aria-selected={tab === "changes"} onClick={() => setTab("changes")}>变更清单</button><button role="tab" aria-selected={tab === "paths"} onClick={() => setTab("paths")}>关联路径</button><button role="tab" aria-selected={tab === "tests"} onClick={() => setTab("tests")}>相关测试</button></div><label className="impact-types"><input type="checkbox" checked={includeTypes} disabled={loadingReport} onChange={(event) => setIncludeTypes(event.target.checked)}/>包含纯类型依赖</label></div>
       <div className="impact-content" aria-busy={loadingReport}>
+        {tab !== "changes" && <section className="impact-symbol-focus" aria-label="按符号聚焦关联">
+          <p>在变化文件中搜索符号，单独追踪其同版本上游关系。声明未变的符号也可查询；静态关联不代表已发生影响。</p>
+          <div className="impact-focus-controls"><label>版本<select aria-label="聚焦版本" value={symbolSide} onChange={event=>{setSymbolSide(event.target.value as ComparisonSide);setSymbolOffset(0);}}><option value="current">工作区新版</option><option value="base" disabled={!report.baseSnapshotId}>HEAD 旧版</option></select></label>
+          <label>符号名称或路径<input aria-label="搜索比较内符号" value={symbolQuery} maxLength={200} placeholder="例如 cleanup.clearFlags" onChange={event=>{setSymbolQuery(event.target.value);setSymbolOffset(0);}}/></label></div>
+          <div aria-live="polite">{symbolsLoading ? <p>搜索保存的比较符号…</p> : symbolError ? <p className="comparison-notice">{symbolError}</p> : symbolQuery.trim() && <>
+            <p>{symbolTotal ? `找到 ${symbolTotal} 个符号，显示 ${symbolOffset+1}–${Math.min(symbolOffset+10,symbolTotal)}` : "没有匹配符号，请调整名称、路径或版本。"}</p>
+            <ul className="impact-symbol-results">{symbols.map(item=><li key={item.side+item.node.id}><button onClick={()=>focusSymbol(item.side,item.node.id)}><strong>{item.node.name}</strong><span>{item.node.path} · {item.node.kind} · {item.side==="base"?"旧版":"新版"}</span></button></li>)}</ul>
+            {(symbolOffset>0||symbolOffset+10<symbolTotal)&&<div className="file-change-actions"><button disabled={symbolOffset===0} onClick={()=>setSymbolOffset(value=>Math.max(0,value-10))}>上一页符号</button><button disabled={symbolOffset+10>=symbolTotal} onClick={()=>setSymbolOffset(value=>value+10)}>下一页符号</button></div>}
+          </>}</div>
+          {symbolFocus && <button className="text-action" onClick={()=>setSymbolFocus(null)}>返回概览路径</button>}
+          {report.focus && <p className="impact-focus-status" role="status">当前聚焦：{report.focus.side==="base"?"HEAD 旧版":"工作区新版"} · {report.focusNode?.name} · {report.focusNode?.path}。独立追踪，最多两跳、100 条路径。</p>}
+          {report.focus && report.overviewTruncated && <p className="comparison-notice">整体概览已截断；以下是该符号从保存图谱重新追踪的结果，不是对概览路径的筛选。</p>}
+        </section>}
         {loadingReport && <p className="impact-updating" role="status">更新关联范围…</p>}
-        {tab === "changes" ? <><div className="impact-filter"><label htmlFor="change-filter">变化类型</label><select id="change-filter" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部变化</option>{Object.entries(fileLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>{report.changes.filter((change) => filter === "all" || change.kind === filter).map((change) => <article className="file-change" key={change.id}><div className="file-change-heading"><span className="change-kind">{fileLabel[change.kind]}</span><strong>{change.newFile?.path ?? change.oldFile?.path}</strong>{change.untracked && <span className="neutral-tag">未跟踪</span>}</div>{change.kind === "rename_candidate" && <p className="old-file-path">原路径：{change.oldFile?.path}</p>}<div className="file-change-actions">{change.oldFile && <button className="text-action" onClick={() => changeRange(change, "base")}>旧版源码<Icon name="arrow" size={13}/></button>}{change.newFile && <button className="text-action" onClick={() => changeRange(change, "current")}>新版源码<Icon name="arrow" size={13}/></button>}<button className="text-action" onClick={() => { setFocus(change.id); setTab("paths"); }}>查看关联路径</button></div><details className="change-details"><summary>{change.symbols.filter((symbol) => symbol.kind !== "unchanged").length} 个变化声明 · {change.hunks.length} 处改动范围<Icon name="chevron" size={12}/></summary><p className="mapping-note">{change.mappingNote}</p>{change.hunks.map((hunk, index) => <div className="change-hunk" key={index}><span>{hunk.coarse ? "文件级范围" : `范围 ${index + 1}`}</span>{change.oldFile && hunk.oldLines > 0 && <button onClick={() => changeRange(change, "base", index)}>旧版 {hunk.oldStart}–{hunk.oldStart + hunk.oldLines - 1} 行</button>}{change.newFile && hunk.newLines > 0 && <button onClick={() => changeRange(change, "current", index)}>新版 {hunk.newStart}–{hunk.newStart + hunk.newLines - 1} 行</button>}</div>)}<div className="changed-symbols">{change.symbols.filter((symbol) => symbol.kind !== "unchanged").map((symbol, index) => <div key={index}><strong>{symbol.newNode?.name ?? symbol.oldNode?.name}</strong><span>{symbolLabel[symbol.kind]}</span><div>{symbol.oldNode && <button onClick={() => node("base", symbol.oldNode!)}>旧版声明</button>}{symbol.newNode && <button onClick={() => node("current", symbol.newNode!)}>新版声明</button>}</div></div>)}</div>{change.truncated && <p className="comparison-notice">声明列表达到上限，部分未展示。</p>}</details></article>)}{!report.changes.filter((change) => filter === "all" || change.kind === filter).length && <p className="quiet-empty">{filter === "all" ? "纳入分析的源码没有文件内容变化。请结合下方分析边界核实配置与范围。" : "当前类型没有变化文件。"}</p>}</> : <><div className="impact-filter"><label htmlFor="impact-focus">改动起点</label><select id="impact-focus" value={focus} onChange={(event) => setFocus(event.target.value)}><option value="all">全部变化文件</option>{report.changes.map((change) => <option key={change.id} value={change.id}>{change.newFile?.path ?? change.oldFile?.path}</option>)}</select></div>{tab === "tests" && <p className="impact-reading-note">这里仅列出路径中实际出现的测试文件静态引用，不表示测试覆盖或执行结果。</p>}<p className="impact-reading-note">路径从改动起点向关联对象展开；箭头保留源码中“引用者 → 被引用者”的方向。</p>{paths.map(pathRow)}{!paths.length && <div className="impact-empty"><h2>{tab === "tests" ? "当前范围未发现静态关联测试" : "当前范围没有已解析的关联路径"}</h2><p>这不能证明没有潜在影响。请结合未解析关系、类型开关和分析范围核实。</p></div>}</>}
-        {report.truncated && <p className="comparison-notice">已达到声明、路径数量或两跳深度限制，展示结果存在截断。</p>}
+        {tab === "changes" ? <><div className="impact-filter"><label htmlFor="change-filter">变化类型</label><select id="change-filter" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部变化</option>{Object.entries(fileLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>{report.changes.filter((change) => filter === "all" || change.kind === filter).map((change) => <article className="file-change" key={change.id}><div className="file-change-heading"><span className="change-kind">{fileLabel[change.kind]}</span><strong>{change.newFile?.path ?? change.oldFile?.path}</strong>{change.untracked && <span className="neutral-tag">未跟踪</span>}</div>{change.kind === "rename_candidate" && <p className="old-file-path">原路径：{change.oldFile?.path}</p>}<div className="file-change-actions">{change.oldFile && <button className="text-action" onClick={() => changeRange(change, "base")}>旧版源码<Icon name="arrow" size={13}/></button>}{change.newFile && <button className="text-action" onClick={() => changeRange(change, "current")}>新版源码<Icon name="arrow" size={13}/></button>}<button className="text-action" onClick={() => { setFocus(change.id); setSymbolFocus(null); setTab("paths"); }}>查看关联路径</button></div><details className="change-details"><summary>{change.symbols.filter((symbol) => symbol.kind !== "unchanged").length} 个变化声明 · {change.hunks.length} 处改动范围<Icon name="chevron" size={12}/></summary><p className="mapping-note">{change.mappingNote}</p>{change.hunks.map((hunk, index) => <div className="change-hunk" key={index}><span>{hunk.coarse ? "文件级范围" : `范围 ${index + 1}`}</span>{change.oldFile && hunk.oldLines > 0 && <button onClick={() => changeRange(change, "base", index)}>旧版 {hunk.oldStart}–{hunk.oldStart + hunk.oldLines - 1} 行</button>}{change.newFile && hunk.newLines > 0 && <button onClick={() => changeRange(change, "current", index)}>新版 {hunk.newStart}–{hunk.newStart + hunk.newLines - 1} 行</button>}</div>)}<div className="changed-symbols">{change.symbols.filter((symbol) => symbol.kind !== "unchanged").map((symbol, index) => <div key={index}><strong>{symbol.newNode?.name ?? symbol.oldNode?.name}</strong><span>{symbolLabel[symbol.kind]}</span><div>{symbol.oldNode && <button onClick={() => node("base", symbol.oldNode!)}>旧版声明</button>}{symbol.newNode && <button onClick={() => node("current", symbol.newNode!)}>新版声明</button>}</div></div>)}</div>{change.truncated && <p className="comparison-notice">声明列表达到上限，部分未展示。</p>}</details></article>)}{!report.changes.filter((change) => filter === "all" || change.kind === filter).length && <p className="quiet-empty">{filter === "all" ? "纳入分析的源码没有文件内容变化。请结合下方分析边界核实配置与范围。" : "当前类型没有变化文件。"}</p>}</> : <>{!report.focus && <div className="impact-filter"><label htmlFor="impact-focus">改动起点</label><select id="impact-focus" value={focus} onChange={(event) => setFocus(event.target.value)}><option value="all">全部变化文件</option>{report.changes.map((change) => <option key={change.id} value={change.id}>{change.newFile?.path ?? change.oldFile?.path}</option>)}</select></div>}{tab === "tests" && <p className="impact-reading-note">这里仅列出路径中实际出现的测试文件静态引用，不表示测试覆盖或执行结果。</p>}<p className="impact-reading-note">路径从改动起点向关联对象展开；箭头保留源码中“引用者 → 被引用者”的方向。</p>{paths.map(pathRow)}{!paths.length && <div className="impact-empty"><h2>{tab === "tests" ? "当前范围未发现静态关联测试" : "当前范围没有已解析的关联路径"}</h2><p>这不能证明没有潜在影响。请结合未解析关系、类型开关和分析范围核实。</p></div>}</>}
+        {report.truncated && <p className="comparison-notice impact-truncation" role="status">{report.focus ? "本次符号查询" : "整体概览"}存在截断：{report.truncation ? [report.truncation.changes && "变化声明或范围摘要",report.truncation.seeds && "每侧 200 个起点",report.truncation.paths && "100 条路径",report.truncation.depth && "两跳深度",report.truncation.work && "20,000 次边检查"].filter(Boolean).join("、") : "声明、路径或深度预算"}。{!report.focus && "可按符号聚焦单独追踪。"}未列出不代表没有关联。</p>}
         <details className="comparison-limitations"><summary>分析边界与未解析项<Icon name="chevron" size={12}/></summary><p>{report.resolutionSummary ? <>解析缺口：旧版 {report.resolutionSummary.base?.gaps ?? 0} 处，新版 {report.resolutionSummary.current.gaps} 处。外部引用：旧版 {report.resolutionSummary.base?.external ?? 0} 处，新版 {report.resolutionSummary.current.external} 处。</> : <>旧版 {report.statistics.oldUnresolved} 处、新版 {report.statistics.newUnresolved} 处未连接目标的关系（含外部引用）。</>}</p><ul>{report.limitations.map((text, index) => <li key={index}>{text}</li>)}</ul></details>
       </div>
     </>}

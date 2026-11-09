@@ -3,8 +3,8 @@ import { mkdirSync, realpathSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { isSnapshotStale } from "@codetrail/analyzer";
-import { calculateComparisonImpact } from "@codetrail/graph";
-import type { ComparisonBundle, ComparisonJob, ComparisonReport } from "@codetrail/shared";
+import { calculateComparisonImpact, comparisonSymbols } from "@codetrail/graph";
+import type { ComparisonBundle, ComparisonJob, ComparisonReport, ComparisonSide, ImpactFocus } from "@codetrail/shared";
 import type { SnapshotStore } from "./store.js";
 import { inspectGit } from "./git.js";
 
@@ -16,9 +16,13 @@ export class ComparisonManager {
   job(id?: string): ComparisonJob | null { const job = id ? this.jobs.get(id) : this.currentJob; return job ? { ...job } : null; }
   latest(): ComparisonReport | null { return this.store.latestComparison()?.report ?? null; }
   bundle(id: string): ComparisonBundle | null { return this.store.comparison(id); }
-  report(id: string, includeTypes = false): ComparisonReport | null {
+  report(id: string, includeTypes = false, focus?: ImpactFocus): ComparisonReport | null {
     const bundle = this.bundle(id);
-    return bundle ? includeTypes ? calculateComparisonImpact(bundle.report, bundle.base?.snapshot ?? null, bundle.current.snapshot, true) : bundle.report : null;
+    return bundle ? includeTypes || focus || !bundle.report.truncation ? calculateComparisonImpact(bundle.report, bundle.base?.snapshot ?? null, bundle.current.snapshot, includeTypes, focus) : bundle.report : null;
+  }
+  symbols(id: string, query = "", side?: ComparisonSide) {
+    const bundle = this.bundle(id);
+    return bundle ? comparisonSymbols(bundle.report, bundle.base?.snapshot ?? null, bundle.current.snapshot, query, side) : null;
   }
   async stale(id: string): Promise<boolean> {
     const bundle = this.bundle(id);

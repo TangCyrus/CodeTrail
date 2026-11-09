@@ -46,6 +46,11 @@ try {
   const node = search.results.find((item) => item.name === "submit"); assert.ok(node);
   const source = await call("read_evidence", { snapshotId: overview.snapshotId, nodeId: node.id }); assert.equal(source.matchesCurrentFile, true);
   const impact = await call("compare_worktree"); assert.equal(impact.baseline.state, "ready"); assert.ok(impact.totals.paths > 0);
+  const symbols = await call("compare_worktree",{comparisonId:impact.comparisonId,symbolQuery:"amount",symbolSide:"current",limit:5});
+  const symbol = symbols.symbols.find(item=>item.node.name==="amount");assert.ok(symbol);
+  const focused = await call("compare_worktree",{comparisonId:impact.comparisonId,focus:{side:"current",nodeId:symbol.node.id},limit:5});
+  assert.ok(focused.paths.length>0&&focused.paths.every(item=>item.side==="current"));assert.deepEqual(focused.snapshotIds,impact.snapshotIds);
+  assert.equal(focused.focus.nodeId,symbol.node.id);assert.ok(focused.truncation);
   const kitDirectory = path.join(verification, "接入包");
   await execute(process.execPath, [path.join(bundle, "scripts/setup-codex.mjs"), project, "--out", kitDirectory], { cwd: verification, env: isolatedEnv, windowsHide: true, timeout: 10_000 });
   assert.ok(readFileSync(path.join(kitDirectory, "config.toml"), "utf8").includes(JSON.stringify(cli)));

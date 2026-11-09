@@ -571,3 +571,12 @@ h1 { font-size: 22px; font-weight: 600; line-height: 1.4; letter-spacing: -.3px;
   .comparison-source-body .source-code { max-height: 52dvh; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+.impact-symbol-focus { padding: 16px 0 24px; border-bottom: 1px solid var(--rule); margin-bottom: 20px; }
+.impact-symbol-focus p { max-width: 70ch; margin: 8px 0; overflow-wrap: anywhere; }
+.impact-focus-controls { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.impact-focus-controls label { display: grid; gap: 6px; }
+.impact-focus-controls label:last-child { flex: 1; min-width: min(100%, 220px); }
+.impact-focus-controls input, .impact-focus-controls select { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--control); border-radius: 4px; background: var(--raised); color: inherit; font: inherit; }
+.impact-symbol-results { list-style: none; padding: 0; margin: 12px 0; }
+.impact-symbol-results button { display: grid; gap: 4px; width: 100%; text-align: left; padding: 10px 0; border-bottom: 1px solid var(--rule); overflow-wrap: anywhere; }
+.impact-symbol-results span { font-size: 13px; }

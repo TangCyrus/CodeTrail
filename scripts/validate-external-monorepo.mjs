@@ -24,7 +24,7 @@ const targetName = receivers ? 'effectScopeOper' : dispatch ? 'createStoreContex
 const targetPath = receivers ? 'packages/store/src/signal.ts' : dispatch ? 'packages/preact-store/src/createStoreContext.tsx' : core ? 'packages/store/src/alien.ts' : 'packages/store/src/shallow.ts', targetFile = path.join(project, targetPath), original = readFileSync(targetFile);
 const workspaceFile = path.join(project, 'pnpm-workspace.yaml'), workspace = readFileSync(workspaceFile);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.8.0' });
+const client = new Client({ name: 'codetrail-external-monorepo-acceptance', version: '0.9.0' });
 const calls = [], proofs = [];
 let overview, comparison, reading, snapshot, result, retainedGap, nestedCanary;
 async function call(name, parameters) {
@@ -93,8 +93,17 @@ try {
     routes.push(...page.paths); offset = page.nextPathOffset;
   }
   assert.equal(new Set(routes.map(x => x.id)).size, comparison.totals.paths);
+  const focusedRoutes = [];
+  if(receivers)for(const side of ['base','current']){
+    const found=await call('compare_worktree',{comparisonId:comparison.comparisonId,symbolQuery:targetName,symbolSide:side,limit:5});
+    const symbol=found.symbols.find(item=>item.node.name===targetName && item.node.path===targetPath);assert.ok(symbol);
+    const focused=await call('compare_worktree',{comparisonId:comparison.comparisonId,focus:{side,nodeId:symbol.node.id},limit:10});
+    assert.deepEqual(focused.snapshotIds,comparison.snapshotIds);assert.equal(focused.stale,false);
+    assert.ok(focused.paths.every(item=>item.side===side&&item.seed.id===symbol.node.id));
+    focusedRoutes.push(...focused.paths);
+  }
   for (const side of ['base', 'current']) {
-    const route = routes.find(x => x.side === side && x.seed.name === targetName
+    const route = (receivers?focusedRoutes:routes).find(x => x.side === side && x.seed.name === targetName
       && (receivers ? x.distance === 1 && x.target.path === targetPath && x.target.name === 'effectOper' : dispatch ? x.distance === 1 && /^packages\/preact-store\/tests\//.test(x.target.path) : core ? /^packages\/store\/src\/(atom|signal)\.ts$/.test(x.target.path) : /^packages\/(react|preact)-store\/tests\//.test(x.target.path)) && x.steps.some(step => step.kind === 'CALLS'));
     assert.ok(route, `Missing source-backed cross-package ${side} test caller`);
     for (const step of route.steps) {
@@ -120,26 +129,15 @@ try {
     assert.ok(source.lines.some(x => x.text.includes(receivers ? side === 'base' ? 'this.flags = NONE' : 'this.clearFlags()' : side === 'base' ? beforeText : afterText)));
   }
   if (receivers) {
-    let route = routes.find(item=>item.side==='current' && item.seed.name.endsWith('.cleanup.clearFlags') && item.target.name==='effectScopeOper' && item.distance===2 && item.steps.every(step=>step.kind==='CALLS'));
-    let source = 'compare_worktree';
-    // The impact list is bounded at 100 paths; paging does not remove that cap.
-    // If a new seed was omitted, inspect the preserved same-side graph explicitly,
-    // then verify its source through MCP. Do not claim the path was in the list.
-    if (!route && comparison.truncated) {
-      const store = new SnapshotStore(path.join(run,'cache'),project);
-      try {
-        const captured = store.comparison(comparison.comparisonId)?.current.snapshot; assert.ok(captured);
-        assert.equal(captured.id,comparison.snapshotIds.current);
-        const symbols = new Map(captured.symbols.map(symbol=>[symbol.id,symbol.qualifiedName]));
-        const calls = captured.relations.filter(edge=>edge.kind==='CALLS' && edge.origin==='static');
-        const first = calls.find(edge=>symbols.get(edge.from)==='effectScopeOper.cleanup.reset' && symbols.get(edge.to)==='effectScopeOper.cleanup.clearFlags');
-        const second = first && calls.find(edge=>edge.to===first.from && symbols.get(edge.from)==='effectScopeOper');
-        if(first && second) route = {steps:[first,second]};
-        source = 'preserved-current-snapshot';
-      }finally{store.close();}
-    }
+    const found=await call('compare_worktree',{comparisonId:comparison.comparisonId,symbolQuery:'cleanup.clearFlags',symbolSide:'current',limit:5});
+    const symbol=found.symbols.find(item=>item.node.name==='effectScopeOper.cleanup.clearFlags');assert.ok(symbol);
+    const focused=await call('compare_worktree',{comparisonId:comparison.comparisonId,focus:{side:'current',nodeId:symbol.node.id},limit:5});
+    assert.deepEqual(focused.snapshotIds,comparison.snapshotIds);assert.equal(focused.stale,false);
+    assert.equal(focused.focus.nodeId,symbol.node.id);assert.ok(focused.truncation);
+    assert.ok(focused.paths.every(item=>item.side==='current'&&item.seed.id===symbol.node.id));
+    const route = focused.paths.find(item=>item.target.name==='effectScopeOper' && item.distance===2 && item.steps.every(step=>step.kind==='CALLS'));
     assert.ok(route,'Nested state alias and method this must form a same-side two-step path');
-    nestedCanary = {source,side:'current',snapshotId:comparison.snapshotIds.current,distance:2,impactListTruncated:comparison.truncated};
+    nestedCanary = {source:'compare_worktree-focus',side:'current',snapshotId:comparison.snapshotIds.current,distance:2,overviewTruncated:focused.overviewTruncated,analysisTruncated:focused.analysisTruncated,truncation:focused.truncation};
     for(const step of route.steps){
       for(const evidenceId of [step.evidenceId,...(step.supportingEvidenceIds??[])]){
         const proof=await call('read_evidence',{comparisonId:comparison.comparisonId,side:'current',evidenceId,maxLines:8});

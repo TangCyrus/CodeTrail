@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AnalysisSnapshot, CapturedSource, ChangeHunk, ComparisonPath, ComparisonReport, ComparisonSide, FileChange, GitBaseline, ImpactStep, SymbolMapping } from "@codetrail/shared";
+import type { AnalysisSnapshot, ComparisonSymbol, ImpactFocus, CapturedSource, ChangeHunk, ComparisonPath, ComparisonReport, ComparisonSide, FileChange, GitBaseline, ImpactStep, SymbolMapping } from "@codetrail/shared";
 import { ProjectExplorer } from "./explorer.js";
 import { summarizeResolution } from "@codetrail/shared";
 
@@ -102,63 +102,93 @@ export function compareSnapshots(input: ComparisonInputs): ComparisonReport {
     currentSnapshotId: current.id, baseSnapshotId: base?.id ?? null, stale: current.stale, changes, paths: [], includeTypes: false, maxDepth: 2, maxPaths: 100,
     resolutionSummary: { base: base ? summarizeResolution(base.unresolved) : null, current: summarizeResolution(current.unresolved) },
     truncated: changes.some((change) => change.truncated), statistics: { files: changes.length, symbols: changes.reduce((sum, change) => sum + change.symbols.filter((symbol) => symbol.kind !== "unchanged").length, 0), paths: 0, testFiles: 0, oldUnresolved: base?.unresolved.length ?? 0, newUnresolved: current.unresolved.length },
-    limitations: ["比较固定为 HEAD 与工作区实际内容，包含已暂存和未暂存修改；未跟踪源码单列。", "潜在关联来自静态图，不证明故障、执行顺序、测试覆盖率或未列出代码不受影响。", "仅换行编码变化不计为代码变化；保留的源码和位置仍对应各自原文。", "重命名提示来自暂存区 Git 相似度或唯一内容；未暂存且内容变化的移动可能显示为删除和新增。", "文件级导入关联较保守，不代表导入者使用了变化的具体符号。", "符号按完整名称与种类唯一映射；改名、歧义和分析范围变化保留缺口。", "默认最多两跳、100 条路径，每个起点与目标保留一条最短依据；回调候选不传播。", ...(!base ? ["缺少 HEAD 基线，仅展示当前源码清单，不生成完整历史影响。"] : []), ...(base?.status === "partial" || current.status === "partial" ? ["至少一侧为部分解析；未解析关系和范围限制可能导致遗漏。"] : []), ...(input.warnings ?? [])] };
+    limitations: ["比较固定为 HEAD 与工作区实际内容，包含已暂存和未暂存修改；未跟踪源码单列。", "潜在关联来自静态图，不证明故障、执行顺序、测试覆盖率或未列出代码不受影响。", "仅换行编码变化不计为代码变化；保留的源码和位置仍对应各自原文。", "重命名提示来自暂存区 Git 相似度或唯一内容；未暂存且内容变化的移动可能显示为删除和新增。", "文件级导入关联较保守，不代表导入者使用了变化的具体符号。", "符号按完整名称与种类唯一映射；改名、歧义和分析范围变化保留缺口。", "每次查询最多两跳、100 条路径、20,000 次边检查；概览每侧最多 200 个起点并轮流分配路径。每个起点与目标保留一条最短依据，回调候选不传播。", "符号聚焦只查询该比较变化文件中的指定版本符号，从保存图独立追踪；符号本身可能未变，不表示完整影响或全部可选调用链。分页不解除分析预算。", ...(!base ? ["缺少 HEAD 基线，仅展示当前源码清单，不生成完整历史影响。"] : []), ...(base?.status === "partial" || current.status === "partial" ? ["至少一侧为部分解析；未解析关系和范围限制可能导致遗漏。"] : []), ...(input.warnings ?? [])] };
   return calculateComparisonImpact(report, base, current);
 }
 
-/** Traverse each version independently: no stitching edges across snapshots. */
-export function calculateComparisonImpact(report: ComparisonReport, base: AnalysisSnapshot | null, current: AnalysisSnapshot, includeTypes = false): ComparisonReport {
-  const result: ComparisonReport = { ...report, includeTypes, paths: [], statistics: { ...report.statistics, paths: 0, testFiles: 0 }, truncated: report.changes.some((change) => change.truncated) };
+/** Search preserved symbols in changed files, independent of mapped-symbol/path caps. */
+export function comparisonSymbols(report: ComparisonReport, base: AnalysisSnapshot | null, current: AnalysisSnapshot, query = "", side?: ComparisonSide): ComparisonSymbol[] {
+  const needle = query.toLowerCase(), results: ComparisonSymbol[] = [];
+  for (const [version, snapshot] of [["base", base], ["current", current]] as const) {
+    if (!snapshot || side && side !== version) continue;
+    const files = new Map(report.changes.filter(change => change.kind !== "scope").flatMap(change => {
+      const file = version === "base" ? change.oldFile : change.newFile;
+      return file ? [[file.id, change.id] as const] : [];
+    }));
+    const model = new ProjectExplorer(snapshot);
+    for (const symbol of snapshot.symbols) {
+      const changeId = files.get(symbol.fileId), node = model.nodes.get(symbol.id)!;
+      if (changeId && `${node.name} ${node.path}`.toLowerCase().includes(needle)) results.push({ side: version, changeId, node });
+    }
+  }
+  return results.sort((a, b) => Number(b.node.name.toLowerCase() === needle) - Number(a.node.name.toLowerCase() === needle)
+    || a.node.path.localeCompare(b.node.path) || a.node.name.localeCompare(b.node.name) || a.side.localeCompare(b.side) || a.node.id.localeCompare(b.node.id));
+}
+
+/** Traverse preserved versions independently, with fair overview seeds or one exact symbol. */
+export function calculateComparisonImpact(report: ComparisonReport, base: AnalysisSnapshot | null, current: AnalysisSnapshot, includeTypes = false, focus?: ImpactFocus): ComparisonReport {
+  const truncation = { changes: report.changes.some(change => change.truncated), seeds: false, paths: false, depth: false, work: false };
+  const result: ComparisonReport = { ...report, includeTypes, paths: [], statistics: { ...report.statistics, paths: 0, testFiles: 0 }, truncated: truncation.changes, truncation };
+  delete result.focus; delete result.focusNode; delete result.overviewTruncated;
+  const selected = focus && comparisonSymbols(report, base, current, "", focus.side).find(item => item.node.id === focus.nodeId);
+  if (focus && !selected) throw new RangeError("聚焦符号不属于该比较指定版本的变化文件，请重新搜索该版本符号。");
+  if (selected) { result.focus = focus; result.focusNode = selected.node; result.overviewTruncated = report.truncated; }
   if (!base) return result;
-  const pathKeys = new Set<string>();
-  const versions: ComparisonPath[][] = [];
+  let inspectedEdges = 0;
+  const versions: Generator<ComparisonPath>[][] = [];
   for (const [side, snapshot] of [["base", base], ["current", current]] as const) {
-    const sidePaths: ComparisonPath[] = [];
+    const generators: Generator<ComparisonPath>[] = []; versions.push(generators);
+    if (focus && focus.side !== side) continue;
     const model = new ProjectExplorer(snapshot), incoming = new Map<string, ImpactStep[]>();
-    const eligible = snapshot.relations.filter((edge) => edge.origin === "static" && ["CALLS", "RENDERS", "REFERENCES", "IMPORTS"].includes(edge.kind) && (includeTypes || edge.usage !== "type"))
+    const eligible = snapshot.relations.filter(edge => edge.origin === "static" && ["CALLS", "RENDERS", "REFERENCES", "IMPORTS"].includes(edge.kind) && (includeTypes || edge.usage !== "type"))
       .sort((a, b) => Number(a.kind === "REFERENCES") - Number(b.kind === "REFERENCES") || a.id.localeCompare(b.id));
     for (const edge of eligible) {
       const from = model.nodes.get(edge.from)!, to = model.nodes.get(edge.to)!;
-      incoming.set(edge.to, [...(incoming.get(edge.to) ?? []), { from, to, kind: edge.kind, usage: edge.usage ?? "value", evidenceId: edge.evidenceId, ...(edge.supportingEvidenceIds ? { supportingEvidenceIds: edge.supportingEvidenceIds } : {}) }]);
+      const step: ImpactStep = { from, to, kind: edge.kind, usage: edge.usage ?? "value", evidenceId: edge.evidenceId, ...(edge.supportingEvidenceIds ? { supportingEvidenceIds: edge.supportingEvidenceIds } : {}) };
+      const list = incoming.get(edge.to); if (list) list.push(step); else incoming.set(edge.to, [step]);
     }
-    for (const change of report.changes) {
-      if (change.kind === "scope") continue;
+    const seeds = selected ? [{ changeId: selected.changeId, node: selected.node }] : report.changes.filter(change => change.kind !== "scope").flatMap(change => {
       const file = side === "base" ? change.oldFile : change.newFile;
-      const seeds = [...change.symbols.filter((mapping) => mapping.kind !== "unchanged").map((mapping) => side === "base" ? mapping.oldNode : mapping.newNode).filter((node) => node !== null), ...(file ? [file] : [])];
-      if (seeds.length > 200) result.truncated = true;
-      for (const seed of seeds.slice(0, 200)) {
-        const visited = new Set([seed.id]);
-        const queue: { node: typeof seed; steps: ImpactStep[] }[] = [{ node: seed, steps: [] }];
+      return [...change.symbols.filter(mapping => mapping.kind !== "unchanged").flatMap(mapping => {
+        const node = side === "base" ? mapping.oldNode : mapping.newNode; return node ? [{ changeId: change.id, node }] : [];
+      }), ...(file ? [{ changeId: change.id, node: file }] : [])];
+    });
+    if (seeds.length > 200) truncation.seeds = true;
+    for (const { changeId, node: seed } of seeds.slice(0, 200)) {
+      function* walk(): Generator<ComparisonPath> {
+        const visited = new Set([seed.id]), queue = [{ node: seed, steps: [] as ImpactStep[] }];
         for (let index = 0; index < queue.length; index++) {
           const item = queue[index]!;
-          const edges = (incoming.get(item.node.id) ?? []).filter((edge) => !visited.has(edge.from.id));
-          if (item.steps.length >= result.maxDepth) { if (edges.length) result.truncated = true; continue; }
-          for (const edge of edges) {
+          for (const edge of incoming.get(item.node.id) ?? []) {
+            if (++inspectedEdges > 20_000) { truncation.work = true; return; }
             if (visited.has(edge.from.id)) continue;
+            if (item.steps.length >= result.maxDepth) { truncation.depth = true; continue; }
             visited.add(edge.from.id);
-            if (sidePaths.length >= result.maxPaths) { result.truncated = true; break; }
-            const steps = [...item.steps, edge];
-            const key = `${side}:${change.id}:${seed.id}:${edge.from.id}`;
-            if (!pathKeys.has(key)) {
-              pathKeys.add(key);
-              const hasTypes = steps.some((step) => step.usage === "type" || step.usage === "mixed"), hasValues = steps.some((step) => step.usage !== "type");
-              const path: ComparisonPath = { id: `path:${id(key)}`, side: side as ComparisonSide, changeId: change.id, seed, target: edge.from, distance: steps.length, steps,
-                dependency: hasTypes ? hasValues ? "mixed" : "type" : "value", test: isTestPath(edge.from.path) };
-              sidePaths.push(path);
-            }
+            const steps = [...item.steps, edge], key = `${side}:${changeId}:${seed.id}:${edge.from.id}`;
+            const hasTypes = steps.some(step => step.usage === "type" || step.usage === "mixed"), hasValues = steps.some(step => step.usage !== "type");
             queue.push({ node: edge.from, steps });
+            yield { id: `path:${id(key)}`, side, changeId, seed, target: edge.from, distance: steps.length, steps,
+              dependency: hasTypes ? hasValues ? "mixed" : "type" : "value", test: isTestPath(edge.from.path) };
           }
         }
       }
+      generators.push(walk());
     }
-    versions.push(sidePaths);
   }
-  // Share the display budget between versions instead of letting old edges hide every new path.
-  for (let index = 0; index < Math.max(...versions.map((paths) => paths.length)); index++) {
-    for (const paths of versions) if (paths[index] && result.paths.length < result.maxPaths) result.paths.push(paths[index]!);
+  // One path per seed per round, alternating versions; high fan-in cannot own the first page.
+  const active: Generator<ComparisonPath>[] = [];
+  for (let index = 0; index < Math.max(...versions.map(items => items.length)); index++) for (const items of versions) if (items[index]) active.push(items[index]!);
+  outer: while (active.length) {
+    for (let index = 0; index < active.length;) {
+      const next = active[index]!.next();
+      if (truncation.work) break outer;
+      if (next.done) { active.splice(index, 1); continue; }
+      if (result.paths.length >= result.maxPaths) { truncation.paths = true; break outer; }
+      result.paths.push(next.value); index++;
+    }
   }
-  if (versions.reduce((sum, paths) => sum + paths.length, 0) > result.maxPaths) result.truncated = true;
+  result.truncated = Object.values(truncation).some(Boolean);
   result.statistics.paths = result.paths.length;
-  result.statistics.testFiles = new Set(result.paths.filter((path) => path.test).map((path) => path.target.path)).size;
+  result.statistics.testFiles = new Set(result.paths.filter(item => item.test).map(item => item.target.path)).size;
   return result;
 }

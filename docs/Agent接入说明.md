@@ -1,14 +1,32 @@
-# Agent 接入说明（0.8.0）
+# Agent 接入说明（0.9.0）
 
 CodeTrail 现在提供本地 MCP 服务和两个配套 Skill，让 Coding Agent 查询架构、阅读顺序、符号关系、源码证据及 Git 改动影响。浏览器工作台仍可独立运行，也可以与 MCP 共用快照。
 
-0.8.0 的调用证据支持封闭对象方法 this、内联嵌套对象别名及有依据的原生 bind/call/apply 函数体来源。读取 `symbol_context` 时应同时核对 `supportingEvidenceIds` 和缺口的 `reasonDetail`；比较时通过同一 `comparisonId` 和明确的 `side` 取旧/新证据。原生 API 的外部引用与补充的函数体调用可以共存，不能据此宣称外部引用已消除。完整口径见 [本轮验证记录](this与嵌套别名验证记录.md)。
+0.9.0 的调用证据支持封闭对象方法 this、内联嵌套对象别名及有依据的原生 bind/call/apply 函数体来源。读取 `symbol_context` 时应同时核对 `supportingEvidenceIds` 和缺口的 `reasonDetail`；比较时通过同一 `comparisonId` 和明确的 `side` 取旧/新证据。原生 API 的外部引用与补充的函数体调用可以共存，不能据此宣称外部引用已消除。完整口径见 [本轮验证记录](this与嵌套别名验证记录.md)。
 
 从 0.2.0 及以前版本升级，请先阅读 [命名迁移说明](命名迁移说明.md)，更新 MCP 名称、Skill 与相关环境变量。
 
-首个完成协议和核心流程验收的宿主是 **Codex CLI 0.166.0-alpha.6 的 app-server**；0.8.0 另在 **0.167.0-alpha.3.2** 复验六个工具和两个 Skill，运行环境为 Windows 11 / Node.js 24.20.0。尚未实际验收其他宿主、操作系统或模型自主选工具的效果。
+首个完成协议和核心流程验收的宿主是 **Codex CLI 0.166.0-alpha.6 的 app-server**；0.9.0 另在 **0.167.0-alpha.3.2** 复验六个工具和两个 Skill，运行环境为 Windows 11 / Node.js 24.20.0。尚未实际验收其他宿主、操作系统或模型自主选工具的效果。
 
 ## 准备
+
+0.9.0 增加正式的符号聚焦接口。升级已有安装后需让宿主重启/重载 MCP，并更新接入包中的 `codetrail-impact` Skill；正在运行的旧服务不会因源码构建而自动重载工具 schema。生成器仍不会覆盖现有用户配置。
+
+在 `compare_worktree` 已返回的 comparisonId 上查询：
+
+```json
+{"comparisonId":"comparison:...","symbolQuery":"cleanup.clearFlags","symbolSide":"current","limit":5}
+```
+
+从 `symbols` 选择准确文件、名称、版本和 node.id，再独立追踪：
+
+```json
+{"comparisonId":"comparison:...","focus":{"side":"current","nodeId":"symbol:..."},"limit":5}
+```
+
+`symbolOffset/nextSymbolOffset` 用于符号分页，`pathOffset/nextPathOffset` 用于路径分页；翻页必须保持相同 comparisonId、focus 和 includeTypes，切换聚焦后重置 pathOffset。聚焦不与 refresh 混用。搜索覆盖变化文件的完整保存符号，包含声明未变的符号，并不证明其自身发生改动。ID 仅用于指定比较及版本，不按同名自动映射旧新节点。
+
+`analysisTruncated` 表示分析预算，`truncation` 的 changes/seeds/paths/depth/work 分别说明变化摘要、概览起点、路径数、深度和边检查上限；`pageTruncated` 表示本次返回仍有省略。`overviewTruncated` 可为 true，而聚焦结果的 paths/depth/work 均未截断。兼容字段 truncated 汇总分析与返回限制，不能只看翻页结束就声称分析完整。完整实证见 [路径聚焦验证](路径聚焦验证记录.md)。
 
 - Node.js 24.x；源码运行另需 npm 11+。
 - Git 用于可选的 HEAD 改动比较；无 Git 仍可查询架构和源码。
@@ -22,7 +40,7 @@ npm ci --ignore-scripts
 npm run build
 ```
 
-预编译 **0.8.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
+预编译 **0.9.0** ZIP 已包含服务、依赖、Skill 和配置生成脚本，解压后可跳过安装及构建。以前的 0.1.0 ZIP 不含 MCP。
 
 ## 生成接入包
 
@@ -99,7 +117,7 @@ tool_timeout_sec = 90
 
 结果同时提供 JSON 文本和结构化内容，包含版本、过期、截断与证据身份；部分解析保留诊断和未解析关系。`status: complete` 只表示分析诊断状态，不承诺完整依赖关系。
 
-0.8.0 使用 `resolutionSummary.gaps` 查看真实缺口，`external` 查看分析范围外的引用，`byReason` 查看原因分布；`totalUnlinked` 等于两者之和。为兼容旧快照，`statistics.unresolved` 及顶层旧 `unresolved` 数字仍包含外部引用。`symbol_context` 的 `unresolvedDetails` 与 `externalReferences` 分开返回，各最多十项，节点完整计数见 `nodeResolutionSummary`；比较两侧计数见 `resolutionSummary.base/current`。
+0.9.0 使用 `resolutionSummary.gaps` 查看真实缺口，`external` 查看分析范围外的引用，`byReason` 查看原因分布；`totalUnlinked` 等于两者之和。为兼容旧快照，`statistics.unresolved` 及顶层旧 `unresolved` 数字仍包含外部引用。`symbol_context` 的 `unresolvedDetails` 与 `externalReferences` 分开返回，各最多十项，节点完整计数见 `nodeResolutionSummary`；比较两侧计数见 `resolutionSummary.base/current`。
 
 部分解构调用具有额外的 `supportingEvidenceIds`，用于核对工厂返回值到实现的来源。它们与调用位置的主证据同属当前快照或比较版本，应使用同一 `snapshotId`，或同一 `comparisonId` 和 `side` 继续读取；不要仅凭类型签名认定实际实现。详见 [核心调用验证](核心调用与外部引用验证记录.md)。
 

@@ -267,4 +267,21 @@ test("comparison API validates side/range, serves deleted source and relationshi
   assert.ok(evidence.highlight);
   assert.equal((await request(`${endpoint}/impact?depth=99`)).status, 400);
   const typed = await (await request(`${endpoint}/impact?includeTypes=true`)).json(); assert.equal(typed.includeTypes, true);
+  assert.equal((await request(`${endpoint}/impact?focusSide=current`)).status,400);
+  assert.equal((await request(`${endpoint}/impact?focusSide=base&focusNodeId=missing`)).status,400);
+  assert.equal((await request(`${endpoint}/symbols?side=unknown`)).status,400);
+  const symbols=await (await request(`${endpoint}/symbols?q=removed&side=base&limit=1`)).json();
+  assert.ok(symbols.symbols[0]);assert.equal(symbols.symbols[0].side,'base');
+  const focused=await (await request(`${endpoint}/impact?focusSide=base&focusNodeId=${encodeURIComponent(symbols.symbols[0].node.id)}`)).json();
+  assert.ok(focused.paths.every(p=>p.side==='base'));assert.equal(focused.focus.nodeId,symbols.symbols[0].node.id);
+});
+
+test('an in-project cache never leaks temporary HEAD sources into the current graph or makes a fresh comparison stale',async t=>{
+ let store,manager;t.after(async()=>{await manager?.close();store?.close()});
+ const project=tempProject(t);const fixture=createGitFixture(project.root);fixture.change();
+ store=new SnapshotStore(path.join(project.root,'custom-cache'),project.root);manager=new ComparisonManager(project.root,store);
+ const bundle=await done(manager,manager.start());
+ assert.ok(!bundle.current.snapshot.files.some(file=>file.path.startsWith('custom-cache/')));
+ assert.equal(bundle.report.stale,false);assert.equal(await manager.stale(bundle.report.id),false);
+ assert.equal(bundle.current.snapshot.files.length,9);
 });

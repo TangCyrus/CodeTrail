@@ -12,7 +12,7 @@ import { summarizeResolution } from "@codetrail/shared";
 import { AnalysisManager } from "./analysis-manager.js";
 import { ComparisonManager } from "./comparison-manager.js";
 
-export const MCP_VERSION = "0.8.0";
+export const MCP_VERSION = "0.9.0";
 export const MCP_RESULT_CHARACTERS = 48_000;
 const id = z.string().min(1).max(512);
 const pinned = { snapshotId: id.describe("Exact snapshotId returned by project_overview; never substitute another snapshot.") };
@@ -188,12 +188,17 @@ export async function createMcpRuntime(options: McpOptions) {
           readingOrder: guide.readingOrder.map((step) => ({ ...step, node: thinNode(step.node) })),
           evidence: evidence(model.snapshot, evidenceIds), truncated: new Set(evidenceIds).size > 8, excludedFiles: guide.excludedFiles };
       });
-    register(server, "compare_worktree", "Compare Git HEAD with staged/unstaged/untracked working source, preserving separate base/current evidence. First call creates a report; refresh=true recomputes after edits. Pages changes and static impact paths. Paths identify related tests, never actual coverage or failures. Without Git/HEAD returns explicit degradation.",
-      z.object({ refresh: z.boolean().default(false), comparisonId: id.optional(), includeTypes: z.boolean().default(false), changeOffset: z.number().int().min(0).max(100_000).default(0), pathOffset: z.number().int().min(0).max(100_000).default(0), limit: z.number().int().min(1).max(10).default(5) }).strict(),
-      async ({ refresh, comparisonId, includeTypes, changeOffset, pathOffset, limit }, signal) => {
+    register(server, "compare_worktree", "Compare HEAD with working source, preserving base/current evidence. Refresh creates a comparison. Pin comparisonId; use symbolQuery/symbolSide to discover symbols in changed files, then focus={side,nodeId} to independently trace that symbol from the preserved graph, beyond overview path/seed caps. Keep focus and includeTypes on every page. analysisTruncated/truncation describe analysis limits; pageTruncated describes bounded response pages. Symbols may be unchanged inside changed files. Paths are static relationships, never coverage/failure proof. Missing HEAD degrades explicitly.",
+      z.object({ refresh: z.boolean().default(false), comparisonId: id.optional(), includeTypes: z.boolean().default(false), focus: z.object({side:z.enum(["base","current"]),nodeId:id}).strict().optional(), symbolQuery:z.string().trim().max(200).optional(), symbolSide:z.enum(["base","current"]).optional(), symbolOffset:z.number().int().min(0).max(100_000).default(0), changeOffset: z.number().int().min(0).max(100_000).default(0), pathOffset: z.number().int().min(0).max(100_000).default(0), limit: z.number().int().min(1).max(10).default(5) }).strict(),
+      async ({ refresh, comparisonId, includeTypes, focus, symbolQuery, symbolSide, symbolOffset, changeOffset, pathOffset, limit }, signal) => {
         if (refresh && comparisonId) throw new ToolError("INVALID_SELECTOR", "refresh 创建新比较，请不要同时传 comparisonId。");
+        if (focus && (!comparisonId || refresh)) throw new ToolError("INVALID_SELECTOR","符号聚焦必须固定 comparisonId，不能同时刷新。");
         const reportId = refresh || !comparisonId && !comparisons.latest() ? await waitJob("comparison", signal) : comparisonId ?? comparisons.latest()!.id;
-        const report = comparisons.report(reportId, includeTypes) ?? missing("比较"), bundle = comparisons.bundle(reportId)!;
+        let report;
+        try { report = comparisons.report(reportId, includeTypes, focus) ?? missing("比较"); }
+        catch(error){if(error instanceof RangeError)throw new ToolError("INVALID_SELECTOR",error.message);throw error;}
+        const bundle = comparisons.bundle(reportId)!;
+        const symbols = symbolQuery === undefined ? [] : comparisons.symbols(reportId,symbolQuery,symbolSide) ?? [];
         const changes = report.changes.slice(changeOffset, changeOffset + limit).map((change) => ({ ...change,
           oldFile: change.oldFile ? thinNode(change.oldFile) : null, newFile: change.newFile ? thinNode(change.newFile) : null,
           hunks: change.hunks.slice(0, 6), hiddenHunks: Math.max(0, change.hunks.length - 6),
@@ -205,11 +210,15 @@ export async function createMcpRuntime(options: McpOptions) {
           status: { base: bundle.base?.snapshot.status ?? null, current: bundle.current.snapshot.status },
           unresolved: { base: report.statistics.oldUnresolved, current: report.statistics.newUnresolved }, sourceTrust: "untrusted-repository-data",
           resolutionSummary: { base: bundle.base ? summarizeResolution(bundle.base.snapshot.unresolved) : null, current: summarizeResolution(bundle.current.snapshot.unresolved) },
-          includeTypes, changes, paths, statistics: report.statistics, limitations: report.limitations,
+          includeTypes, focus:report.focus??null, focusNode:report.focusNode?thinNode(report.focusNode):null, overviewTruncated:report.overviewTruncated??report.truncated,
+          analysisTruncated:report.truncated, truncation:report.truncation,
+          ...(symbolQuery===undefined?{}:{symbols:symbols.slice(symbolOffset,symbolOffset+limit).map(item=>({...item,node:thinNode(item.node)})),totalSymbols:symbols.length,nextSymbolOffset:symbolOffset+limit<symbols.length?symbolOffset+limit:null}),
+          changes, paths, statistics: report.statistics, limitations: report.limitations,
           totals: { changes: report.changes.length, paths: report.paths.length },
           nextChangeOffset: changeOffset + limit < report.changes.length ? changeOffset + limit : null,
           nextPathOffset: pathOffset + limit < report.paths.length ? pathOffset + limit : null,
-          truncated: report.truncated || changeOffset + limit < report.changes.length || pathOffset + limit < report.paths.length || changes.some((item) => item.truncated || item.hiddenHunks > 0 || item.hiddenSymbols > 0) || evidenceBySide.length > 8,
+          pageTruncated:changeOffset+limit<report.changes.length||pathOffset+limit<report.paths.length||changes.some(item=>item.hiddenHunks>0||item.hiddenSymbols>0)||evidenceBySide.length>8||symbolOffset+limit<symbols.length,
+          truncated: report.truncated || changeOffset + limit < report.changes.length || pathOffset + limit < report.paths.length || changes.some((item) => item.truncated || item.hiddenHunks > 0 || item.hiddenSymbols > 0) || evidenceBySide.length > 8 || symbolOffset+limit<symbols.length,
           evidence: evidenceBySide.slice(0, 8).flatMap((item) => evidence(bundle[item.side]!.snapshot, [item.id]).map((proof) => ({ ...proof, side: item.side }))),
           ...(workbenchUrl ? { workbenchUrl } : {}) };
       });

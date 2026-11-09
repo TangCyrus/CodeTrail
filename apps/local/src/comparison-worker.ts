@@ -27,6 +27,12 @@ function captureVersion(root: string): Promise<{ snapshot: AnalysisSnapshot; sou
   });
 }
 let temporary: string | undefined;
+function discardBaseline(): void {
+  if (!temporary) return;
+  const parent = realpathSync(temporaryDirectory), target = realpathSync(temporary);
+  if (path.dirname(target) !== parent || !path.basename(target).startsWith("head-")) throw new Error("Unsafe baseline cleanup");
+  rmSync(target, {recursive:true,force:true}); temporary = undefined;
+}
 try {
   progress("git");
   const git = await inspectGit(rootDir, true);
@@ -43,6 +49,9 @@ try {
     base.rootDir = rootDir;
     // Physical staging paths must not make immutable HEAD identities change on every refresh.
     base.id = `baseline:${sha(JSON.stringify({ head: git.head, scope: git.scope, files: base.files.map((file) => [file.path, file.hash]), inputs: base.configuration.inputs, analyzer: base.analyzer })).slice(0, 24)}`;
+    // Captured HEAD data is already plain in-memory source/snapshot data. Remove
+    // staging before scanning current: a custom cache may be inside the project.
+    discardBaseline();
   }
   progress("current");
   const capturedCurrent = await captureVersion(rootDir);
@@ -58,8 +67,5 @@ try {
 } catch {
   parentPort!.postMessage({ type: "failed", error: "比较未能完成。请检查 Git 与文件读取权限，或缩小分析目录后重试。" });
 } finally {
-  if (temporary) {
-    const parent = realpathSync(temporaryDirectory), target = realpathSync(temporary);
-    if (path.dirname(target) === parent && path.basename(target).startsWith("head-")) rmSync(target, { recursive: true, force: true });
-  }
+  discardBaseline();
 }

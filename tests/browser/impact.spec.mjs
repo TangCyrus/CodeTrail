@@ -116,7 +116,7 @@ test("repository without commits lists current additions and explains the missin
   await page.goto(unbornUrl); await expect(page.locator(".snapshot-state")).toBeVisible(); await enter(page);
   await expect(page.locator(".impact-baseline")).toContainText("尚无 HEAD");
   await compare(page);
-  await expect(page.locator(".comparison-summary")).toContainText("0 条关联路径");
+  await expect(page.locator(".comparison-summary")).toContainText("0 条概览关联路径");
   await expect(page.locator(".comparison-notice").first()).toContainText("HEAD");
   await page.getByRole("tab", { name: "关联路径", exact: true }).click();
   await expect(page.locator(".impact-empty")).toContainText("没有已解析的关联路径");

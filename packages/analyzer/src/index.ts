@@ -10,7 +10,7 @@ import { summarizeResolution } from "@codetrail/shared";
 import { ObjectDispatchResolver, type DispatchFailure } from "./object-dispatch.js";
 import { BoundCallResolver } from "./bound-calls.js";
 
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 const shortId = (prefix: string, value: string): string => `${prefix}:${hash(value).slice(0, 24)}`;
 type NamedDeclaration = ts.Declaration & { name: ts.DeclarationName };
 interface Registered { node: ts.Node; record: SymbolRecord; symbol: ts.Symbol | undefined; callable: boolean }

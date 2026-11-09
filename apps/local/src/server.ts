@@ -75,12 +75,24 @@ export async function createLocalServer(options: LocalServerOptions) {
     if (!await comparisons.cancel(request.params.id)) throw new HttpError(409, "比较任务已结束。");
     return comparisons.job(request.params.id);
   });
-  app.get<{ Params: { id: string }; Querystring: { includeTypes?: boolean } }>("/api/comparisons/:id/impact", {
-    schema: { querystring: { type: "object", additionalProperties: false, properties: { includeTypes: { type: "boolean" } } } },
+  app.get<{ Params: { id: string }; Querystring: { includeTypes?: boolean; focusSide?: ComparisonSide; focusNodeId?: string } }>("/api/comparisons/:id/impact", {
+    schema: { querystring: { type: "object", additionalProperties: false, properties: { includeTypes: { type: "boolean" }, focusSide: {type:"string",enum:["base","current"]}, focusNodeId: {type:"string",minLength:1,maxLength:512} } } },
   }, async (request) => {
-    const report = comparisons.report(request.params.id, request.query.includeTypes);
+    const { focusSide, focusNodeId } = request.query;
+    if (!!focusSide !== !!focusNodeId) throw new HttpError(400, "符号聚焦需要同时指定版本和节点 ID。");
+    let report;
+    try { report = comparisons.report(request.params.id, request.query.includeTypes, focusSide && focusNodeId ? {side:focusSide,nodeId:focusNodeId} : undefined); }
+    catch(error) { if(error instanceof RangeError) throw new HttpError(400,error.message); throw error; }
     if (!report) throw new HttpError(404, "比较结果不存在或已清理，请重新比较。");
     return report;
+  });
+  app.get<{Params:{id:string};Querystring:{q?:string;side?:ComparisonSide;offset?:number;limit?:number}}>("/api/comparisons/:id/symbols", {
+    schema:{querystring:{type:"object",additionalProperties:false,properties:{q:{type:"string",maxLength:200},side:{type:"string",enum:["base","current"]},offset:{type:"integer",minimum:0,maximum:100000},limit:{type:"integer",minimum:1,maximum:20}}}},
+  },async(request)=>{
+    const found=comparisons.symbols(request.params.id,request.query.q,request.query.side);
+    if(!found)throw new HttpError(404,"比较结果不存在或已清理，请重新比较。");
+    const offset=request.query.offset??0,limit=request.query.limit??10;
+    return {comparisonId:request.params.id,symbols:found.slice(offset,offset+limit),total:found.length,nextOffset:offset+limit<found.length?offset+limit:null};
   });
   app.get<{ Params: { id: string } }>("/api/comparisons/:id/status", async (request) => ({ stale: await comparisons.stale(request.params.id) }));
   app.get<{ Params: { id: string; side: string; fileId: string }; Querystring: { line?: number; symbol?: string; evidence?: string; change?: string; hunk?: number } }>("/api/comparisons/:id/:side/files/:fileId", {

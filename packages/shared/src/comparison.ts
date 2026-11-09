@@ -1,6 +1,9 @@
 import type { AnalysisSnapshot, CapturedSource, ExplorerNode, RelationKind, SourceWindow } from "./index.js";
 
 export type ComparisonSide = "base" | "current";
+export interface ImpactFocus { side: ComparisonSide; nodeId: string }
+export interface ImpactTruncation { changes: boolean; seeds: boolean; paths: boolean; depth: boolean; work: boolean }
+export interface ComparisonSymbol { side: ComparisonSide; changeId: string; node: ExplorerNode }
 export interface GitBaseline {
   state: "ready" | "no_head" | "not_repository" | "unavailable";
   head: string | null;
@@ -59,6 +62,10 @@ export interface ComparisonReport {
   maxPaths: number;
   truncated: boolean;
   statistics: { files: number; symbols: number; paths: number; testFiles: number; oldUnresolved: number; newUnresolved: number };
+  focus?: ImpactFocus;
+  focusNode?: ExplorerNode;
+  overviewTruncated?: boolean;
+  truncation?: ImpactTruncation;
   resolutionSummary?: { base: import("./index.js").ResolutionSummary | null; current: import("./index.js").ResolutionSummary };
   limitations: string[];
 }

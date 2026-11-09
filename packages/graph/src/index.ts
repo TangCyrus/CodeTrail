@@ -2,7 +2,7 @@ import type { AnalysisSnapshot, RelationRecord } from "@codetrail/shared";
 export { ProjectExplorer } from "./explorer.js";
 export type { GraphOptions } from "./explorer.js";
 export { recommendReading, READING_ALGORITHM_VERSION } from "./reading.js";
-export { compareSnapshots, calculateComparisonImpact, changedLines, isTestPath } from "./comparison.js";
+export { compareSnapshots, calculateComparisonImpact, comparisonSymbols, changedLines, isTestPath } from "./comparison.js";
 export type { ComparisonInputs } from "./comparison.js";
 
 export interface ImpactPath { nodeId: string; distance: number; relationIds: string[] }

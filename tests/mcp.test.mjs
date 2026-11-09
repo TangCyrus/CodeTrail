@@ -10,6 +10,7 @@ import { createMcpRuntime, MCP_RESULT_CHARACTERS } from "../apps/local/dist/mcp.
 import { tempProject } from "./helpers.mjs";
 import { root, prepareGitDemo, gitInOwnedDemo } from "../scripts/acceptance-projects.mjs";
 import { createCodexKit } from "../scripts/setup-codex.mjs";
+import {createGitFixture,gitCommand} from './git-fixture.mjs';
 
 const files = {
   "tsconfig.json": JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", strict: true } }),
@@ -35,6 +36,33 @@ async function start(t, { project = tempProject(t, files), workbench = false } =
   }
   return { client, call, raw, project, transport, stderr: () => stderr };
 }
+
+test('focused MCP queries search preserved symbols and recover unlisted same-side paths with evidence',async t=>{
+ const project=tempProject(t);createGitFixture(project.root);
+ const text=`function hot(){return 1}\n${Array.from({length:130},(_,i)=>`function caller${i}(){hot()}`).join('\n')}
+ function dormant(){return 1} function middle(){dormant()} function outer(){middle()}`;
+ project.write('index.ts',text);gitCommand(project.root,['add','--all']);gitCommand(project.root,['commit','--quiet','-m','Focus baseline']);
+ project.write('index.ts',text.replace('hot(){return 1}','hot(){return 2}')+'\nfunction addedOnly(){}');
+ const {call,raw}=await start(t,{project});
+ const overview=await call('compare_worktree',{refresh:true,limit:1});
+ assert.equal(overview.analysisTruncated,true);assert.equal(overview.truncation.paths,true);
+ const find=await call('compare_worktree',{comparisonId:overview.comparisonId,symbolQuery:'dormant',symbolSide:'current',limit:5});
+ const symbol=find.symbols.find(x=>x.node.name==='dormant');assert.ok(symbol);
+ const focus={side:'current',nodeId:symbol.node.id};
+ const first=await call('compare_worktree',{comparisonId:overview.comparisonId,focus,limit:1});
+ assert.equal(first.analysisTruncated,false);assert.equal(first.overviewTruncated,true);assert.equal(first.pageTruncated,true);
+ const second=await call('compare_worktree',{comparisonId:overview.comparisonId,focus,pathOffset:first.nextPathOffset,limit:1});
+ assert.deepEqual(first.snapshotIds,second.snapshotIds);assert.ok(second.paths.some(p=>p.target.name==='outer'&&p.distance===2));
+ assert.ok([...first.paths,...second.paths].every(p=>p.side==='current'&&p.seed.id===symbol.node.id));
+ const proof=await call('read_evidence',{comparisonId:overview.comparisonId,side:'current',evidenceId:first.paths[0].steps[0].evidenceId});
+ assert.equal(proof.snapshotId,overview.snapshotIds.current);assert.equal(proof.matchesCurrentFile,true);
+ const added=await call('compare_worktree',{comparisonId:overview.comparisonId,symbolQuery:'addedOnly',symbolSide:'current'});
+ assert.equal((await raw('compare_worktree',{comparisonId:overview.comparisonId,focus:{side:'base',nodeId:added.symbols[0].node.id}})).isError,true);
+ assert.equal((await raw('compare_worktree',{refresh:true,focus})).isError,true);
+ project.write('index.ts',text+'\n// later edit');
+ const stale=await call('compare_worktree',{comparisonId:overview.comparisonId,focus});assert.equal(stale.stale,true);
+ assert.deepEqual(stale.snapshotIds,overview.snapshotIds);
+});
 
 test("real stdio handshake exposes six read-only tools and a complete source-backed exploration flow", async (t) => {
   const { client, call, project, stderr } = await start(t);

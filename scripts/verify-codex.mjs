@@ -45,7 +45,7 @@ function request(method, params) {
 }
 let result;
 try {
-  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.8.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
+  const initialized = await request("initialize", { clientInfo: { name: "codetrail_acceptance", version: "0.9.0", title: "CodeTrail host acceptance" }, capabilities: { experimentalApi: true } });
   child.stdin.write(JSON.stringify({ method: "initialized", params: {} }) + "\n");
   const skills = await request("skills/list", { cwds: [project], forceReload: true });
   writeFileSync(path.join(run, "skills-discovery.json"), JSON.stringify(skills, null, 2));
@@ -83,6 +83,11 @@ try {
   assert.ok(reading.readingOrder.length > 0);
   const comparison = await call("compare_worktree", { refresh: true, limit: 10 });
   assert.equal(comparison.baseline.state, "ready"); assert.equal(comparison.stale, false);
+  const candidates = await call("compare_worktree", { comparisonId:comparison.comparisonId, symbolQuery:"amount", symbolSide:"current",limit:5 });
+  const candidate = candidates.symbols.find(item=>item.node.name==="amount");assert.ok(candidate);
+  const focused = await call("compare_worktree", { comparisonId:comparison.comparisonId, focus:{side:"current",nodeId:candidate.node.id},limit:5 });
+  assert.equal(focused.focus.nodeId,candidate.node.id);assert.deepEqual(focused.snapshotIds,comparison.snapshotIds);
+  assert.ok(focused.paths.length>0&&focused.paths.every(item=>item.side==="current"));
   const oldPath = comparison.paths.find((item) => item.side === "base"); assert.ok(oldPath);
   const oldProof = await call("read_evidence", { comparisonId: comparison.comparisonId, side: "base", evidenceId: oldPath.steps[0].evidenceId });
   assert.equal(oldProof.snapshotId, comparison.snapshotIds.base);
@@ -96,7 +101,7 @@ try {
     discoveredSkills: skillNames.filter((name) => name.startsWith("codetrail-")), tools: toolNames,
     toolCalls: calls.length, maxResultCharacters: Math.max(...calls.map((call) => JSON.stringify(call.result).length)), modelTurns: 0, modelCalls: 0, userConfigurationModified: false,
     validation: "Actual Codex app-server discovery and tool invocation; deterministic harness chooses calls. This does not evaluate model tool selection or explanation quality.",
-    checks: ["skill discovery", "stdio server discovery", "architecture/search/context/source/reading", "HEAD comparison with base evidence", "edit staleness and explicit refresh"] };
+    checks: ["skill discovery", "stdio server discovery", "architecture/search/context/source/reading", "HEAD comparison with base evidence", "symbol search and same-side focused paths", "edit staleness and explicit refresh"] };
   writeFileSync(path.join(run, "tool-calls.json"), JSON.stringify(calls, null, 2));
   await request("thread/unsubscribe", { threadId });
 } catch (error) {
